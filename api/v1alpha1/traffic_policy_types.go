@@ -67,6 +67,11 @@ type TrafficPolicySpec struct {
 	// This controls the rate at which requests are allowed to be processed.
 	// +optional
 	RateLimit *RateLimit `json:"rateLimit,omitempty"`
+
+	// AutoHostRewrite rewrites the Host header to the DNS name of the selected upstream.
+	// Only honoured for HTTPRoute targets.
+	// +kubebuilder:validation:Enum=true;false
+	AutoHostRewrite *bool `json:"autoHostRewrite,omitempty"`
 }
 
 // TransformationPolicy config is used to modify envoy behavior at a route level.

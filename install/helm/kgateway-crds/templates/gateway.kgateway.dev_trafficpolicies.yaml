@@ -273,6 +273,11 @@ spec:
                     - CHAT_STREAMING
                     type: string
                 type: object
+              autoHostRewrite:
+                enum:
+                - true
+                - false
+                type: boolean
               extAuth:
                 properties:
                   contextExtensions:

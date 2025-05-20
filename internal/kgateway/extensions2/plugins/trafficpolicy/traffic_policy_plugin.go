@@ -130,6 +130,7 @@ type trafficPolicySpecIr struct {
 	localRateLimit             *localratelimitv3.LocalRateLimit
 	rateLimit                  *RateLimitIR
 	errors                     []error
+	autoHostRewrite 		   *wrapperspb.BoolValue
 }
 
 func (d *TrafficPolicy) CreationTime() time.Time {
@@ -669,6 +670,16 @@ func (p *trafficPolicyPluginGwPass) ApplyForRoute(ctx context.Context, pCtx *ir.
 		}
 	}
 
+	if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.Value {
+		route := outputRoute.GetRoute()
+		if route != nil {
+			if route.Action == nil {
+				route.Action = &routev3.RouteAction{}
+			}
+			route.Action.AutoHostRewrite = policy.spec.autoHostRewrite
+		}
+	}
+
 	if policy.spec.AI != nil {
 		var aiBackends []*v1alpha1.Backend
 		// check if the backends selected by targetRef are all AI backends before applying the policy
@@ -1149,6 +1160,11 @@ func TrafficPolicyBuilder(
 
 		// Apply global rate limit specific translation
 		rateLimitForSpec(commoncol, krtctx, policyCR, &outSpec, gatewayExtensions)
+
+		// 🆕 Handle autoHostRewrite
+		if policyCR.Spec.AutoHostRewrite != nil && *policyCR.Spec.AutoHostRewrite {
+            outSpec.autoHostRewrite = wrapperspb.Bool(true)
+        }
 
 		for _, err := range errors {
 			contextutils.LoggerFrom(ctx).Error(policyCR.GetNamespace(), policyCR.GetName(), err)
