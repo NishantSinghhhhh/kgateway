@@ -129,6 +129,7 @@ type trafficPolicySpecIr struct {
 	extAuth                    *extAuthIR
 	localRateLimit             *localratelimitv3.LocalRateLimit
 	rateLimit                  *RateLimitIR
+	errors                     []error
 	autoHostRewrite 		   *wrapperspb.BoolValue
 }
 
