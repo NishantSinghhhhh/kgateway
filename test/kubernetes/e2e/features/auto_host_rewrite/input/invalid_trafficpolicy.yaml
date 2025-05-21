@@ -1,0 +1,12 @@
+apiVersion: trafficpolicy.kgateway.io/v1alpha1
+kind: TrafficPolicy
+metadata:
+  name: bad-policy
+spec:
+  targetRef:
+    group: ""
+    kind: Service
+    name: echo
+    namespace: auto-host-rewrite-invalid
+  hostRewrite: "somehost.local"
+  autoHostRewrite: true
