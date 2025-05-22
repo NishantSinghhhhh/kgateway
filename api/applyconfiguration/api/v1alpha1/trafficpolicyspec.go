@@ -5,14 +5,14 @@ package v1alpha1
 // TrafficPolicySpecApplyConfiguration represents a declarative configuration of the TrafficPolicySpec type for use
 // with apply.
 type TrafficPolicySpecApplyConfiguration struct {
-	TargetRefs      []LocalPolicyTargetReferenceApplyConfiguration `json:"targetRefs,omitempty"`
-	TargetSelectors []LocalPolicyTargetSelectorApplyConfiguration  `json:"targetSelectors,omitempty"`
-	AI              *AIPolicyApplyConfiguration                    `json:"ai,omitempty"`
-	Transformation  *TransformationPolicyApplyConfiguration        `json:"transformation,omitempty"`
-	ExtProc         *ExtProcPolicyApplyConfiguration               `json:"extProc,omitempty"`
-	ExtAuth         *ExtAuthPolicyApplyConfiguration               `json:"extAuth,omitempty"`
-	RateLimit       *RateLimitApplyConfiguration                   `json:"rateLimit,omitempty"`
-	AutoHostRewrite *bool                                          `json:"autoHostRewrite,omitempty"`
+	TargetRefs      []LocalPolicyTargetReferenceWithSectionNameApplyConfiguration `json:"targetRefs,omitempty"`
+	TargetSelectors []LocalPolicyTargetSelectorApplyConfiguration                 `json:"targetSelectors,omitempty"`
+	AI              *AIPolicyApplyConfiguration                                   `json:"ai,omitempty"`
+	Transformation  *TransformationPolicyApplyConfiguration                       `json:"transformation,omitempty"`
+	ExtProc         *ExtProcPolicyApplyConfiguration                              `json:"extProc,omitempty"`
+	ExtAuth         *ExtAuthPolicyApplyConfiguration                              `json:"extAuth,omitempty"`
+	RateLimit       *RateLimitApplyConfiguration                                  `json:"rateLimit,omitempty"`
+	AutoHostRewrite *bool                                                         `json:"autoHostRewrite,omitempty"`
 }
 
 // TrafficPolicySpecApplyConfiguration constructs a declarative configuration of the TrafficPolicySpec type for use with
