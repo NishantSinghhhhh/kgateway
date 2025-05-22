@@ -11,6 +11,7 @@ import (
 	envoy_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	envoy_config_listener_v3 "github.com/envoyproxy/go-control-plane/envoy/config/listener/v3"
 	ratelimitv3 "github.com/envoyproxy/go-control-plane/envoy/config/ratelimit/v3"
+	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	exteniondynamicmodulev3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
 	dynamicmodulesv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
@@ -32,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
-
 	// TODO(nfuden): remove once rustformations are able to be used in a production environment
 	transformationpb "github.com/solo-io/envoy-gloo/go/config/filter/http/transformation/v2"
 
@@ -130,7 +130,7 @@ type trafficPolicySpecIr struct {
 	localRateLimit             *localratelimitv3.LocalRateLimit
 	rateLimit                  *RateLimitIR
 	errors                     []error
-	autoHostRewrite 		   *wrapperspb.BoolValue
+	autoHostRewrite            *wrapperspb.BoolValue
 }
 
 func (d *TrafficPolicy) CreationTime() time.Time {
@@ -188,15 +188,15 @@ func (d *TrafficPolicy) Equals(in any) bool {
 		return false
 	}
 
+	// Handle nil cases
 	if (d.spec.autoHostRewrite == nil) != (d2.spec.autoHostRewrite == nil) {
 		return false
 	}
-	if d.spec.autoHostRewrite != nil && d2.spec.autoHostRewrite != nil {
-		if d.spec.autoHostRewrite.Value != d2.spec.autoHostRewrite.Value {
-			return false
-		}
-	}
 
+	// If both are nil, they're equal; if both are non-nil, compare values
+	if d.spec.autoHostRewrite != nil {
+		return d.spec.autoHostRewrite.GetValue() == d2.spec.autoHostRewrite.GetValue()
+	}
 	return true
 }
 
@@ -623,13 +623,11 @@ func (p *trafficPolicyPluginGwPass) ApplyForRoute(ctx context.Context, pCtx *ir.
 		p.setTransformationInChain = true
 	}
 
-	if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.Value {
-		route := outputRoute.GetRoute()
-		if route != nil {
-			if route.Action == nil {
-				route.Action = &routev3.RouteAction{}
+	if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
+		if ra := outputRoute.GetRoute(); ra != nil {
+			ra.HostRewriteSpecifier = &route.RouteAction_AutoHostRewrite{
+				AutoHostRewrite: policy.spec.autoHostRewrite,
 			}
-			route.Action.AutoHostRewrite = policy.spec.autoHostRewrite
 		}
 	}
 
@@ -1121,8 +1119,8 @@ func (b *TrafficPolicyBuilder) Translate(
 
 	// 🆕 Handle autoHostRewrite
 	if policyCR.Spec.AutoHostRewrite != nil && *policyCR.Spec.AutoHostRewrite {
-        outSpec.autoHostRewrite = wrapperspb.Bool(true)
-    }
+		outSpec.autoHostRewrite = wrapperspb.Bool(true)
+	}
 
 	// Apply rate limit specific translation
 	err = localRateLimitForSpec(policyCR.Spec, &outSpec)

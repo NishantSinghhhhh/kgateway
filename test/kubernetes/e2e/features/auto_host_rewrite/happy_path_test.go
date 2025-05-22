@@ -2,11 +2,9 @@ package autohostrewrite
 
 import (
 	"context"
-	"net/http"
 	"path/filepath"
 	"testing"
 
-	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	"github.com/stretchr/testify/suite"
 	corev1 "k8s.io/api/core/v1"
@@ -20,34 +18,25 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/defaults"
 )
 
+// TestAutoHostRewrite runs the AutoHostRewrite E2E suite.
 func TestAutoHostRewrite(t *testing.T) {
-	gomega.RegisterFailHandler(ginkgo.Fail)
-	ginkgo.RunSpecs(t, "AutoHostRewrite E2E Suite")
+	e2e.RunSuite(t, NewTestingSuite)
 }
 
-// -----------------------------------------------------------------------------
-// suite registration – this is how TestInstallation is injected
-// -----------------------------------------------------------------------------
-
+// Ensure NewTestingSuite matches the harness signature.
 var _ e2e.NewSuiteFunc = NewTestingSuite
 
+// NewTestingSuite constructs the testify suite for AutoHostRewrite.
 func NewTestingSuite(ctx context.Context, ti *e2e.TestInstallation) suite.TestingSuite {
-	return &suiteImpl{ctx: ctx, ti: ti}
+	return &happySuite{ctx: ctx, ti: ti}
 }
 
-// -----------------------------------------------------------------------------
-// suite definition
-// -----------------------------------------------------------------------------
-
-type suiteImpl struct {
+// happySuite holds test context and installation.
+type happySuite struct {
 	suite.Suite
 	ctx context.Context
 	ti  *e2e.TestInstallation
 }
-
-// -----------------------------------------------------------------------------
-// constants & manifest paths
-// -----------------------------------------------------------------------------
 
 const ns = "auto-host-rewrite"
 
@@ -66,24 +55,21 @@ var (
 	}
 )
 
-// -----------------------------------------------------------------------------
-// happy-path test
-// -----------------------------------------------------------------------------
-
-func (s *suiteImpl) TestAutoHostRewrite_HappyPath() {
-	// clean-up after the test
+// TestAutoHostRewrite_HappyPath verifies the Host header is rewritten.
+func (s *happySuite) TestAutoHostRewrite_HappyPath() {
+	// Clean up resources when done.
 	s.T().Cleanup(func() {
 		for _, m := range manifests {
 			_ = s.ti.Actions.Kubectl().DeleteFileSafe(s.ctx, m)
 		}
 	})
 
-	// apply manifests
+	// Apply YAML manifests
 	for _, m := range manifests {
 		s.Require().NoError(s.ti.Actions.Kubectl().ApplyFile(s.ctx, m))
 	}
 
-	// wait for echo & curl pods
+	// Wait for pods: echo and curl
 	s.ti.Assertions.EventuallyPodsRunning(s.ctx, ns,
 		metav1.ListOptions{LabelSelector: "app.kubernetes.io/name=echo"},
 	)
@@ -91,7 +77,7 @@ func (s *suiteImpl) TestAutoHostRewrite_HappyPath() {
 		metav1.ListOptions{LabelSelector: "app.kubernetes.io/name=curl"},
 	)
 
-	// assert traffic
+	// Perform curl and check rewritten Host
 	s.ti.Assertions.AssertEventualCurlResponse(
 		s.ctx,
 		defaults.CurlPodExecOpt,

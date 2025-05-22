@@ -3,12 +3,13 @@
 package applyconfiguration
 
 import (
-	apiv1alpha1 "github.com/kgateway-dev/kgateway/v2/api/applyconfiguration/api/v1alpha1"
-	internal "github.com/kgateway-dev/kgateway/v2/api/applyconfiguration/internal"
-	v1alpha1 "github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	testing "k8s.io/client-go/testing"
+
+	apiv1alpha1 "github.com/kgateway-dev/kgateway/v2/api/applyconfiguration/api/v1alpha1"
+	internal "github.com/kgateway-dev/kgateway/v2/api/applyconfiguration/internal"
+	v1alpha1 "github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 )
 
 // ForKind returns an apply configuration type for the given GroupVersionKind, or nil if no
@@ -126,6 +127,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.LLMProviderApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("LocalPolicyTargetReference"):
 		return &apiv1alpha1.LocalPolicyTargetReferenceApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("LocalPolicyTargetReferenceWithSectionName"):
+		return &apiv1alpha1.LocalPolicyTargetReferenceWithSectionNameApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("LocalPolicyTargetSelector"):
 		return &apiv1alpha1.LocalPolicyTargetSelectorApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("LocalRateLimitPolicy"):
