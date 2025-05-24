@@ -1,88 +1,108 @@
 //go:build unit
 // +build unit
 
-package trafficpolicy_test
+package trafficpolicy
 
 import (
 	"context"
 	"testing"
 
-	trafficpolicyv1 "github.com/kgateway-dev/kgateway/v2/apis/trafficpolicy/v1alpha1"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugins/trafficpolicy"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
-	"github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
+	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 )
 
-// --- bootstraps the suite ----------------------------------------------------
 
-func TestAutoHostRewritePlugin(t *testing.T) {
-	RegisterFailHandler(ginkgo.Fail)
-	ginkgo.RunSpecs(t, "autoHostRewrite translator-plugin suite")
+func TestTranslate_SetsAutoHostRewrite(t *testing.T) {
+	boolPtr := func(b bool) *bool { return &b }
+
+	tests := []struct {
+		name       string
+		input      *bool // value in TrafficPolicy.Spec.autoHostRewrite
+		shouldHave bool  // expect non-nil in IR?
+		wantValue  bool  // if shouldHave, what value?
+	}{
+		{"true", boolPtr(true), true, true},
+		{"false", boolPtr(false), true, false},
+		{"nil", nil, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// minimal CR
+			cr := minimalTrafficPolicyCR(tt.input)
+
+			b := NewTrafficPolicyBuilder(context.Background(), nil) // nil common collections because we don't hit deps
+			irPolicy, errs := b.Translate(nil, cr)
+			require.Empty(t, errs)
+
+			got := irPolicy.spec.autoHostRewrite
+
+			if !tt.shouldHave {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantValue, got.Value)
+		})
+	}
 }
 
-// --- helpers -----------------------------------------------------------------
+func TestApplyForRoute_SetsRouteActionFlag(t *testing.T) {
+	ctx := context.Background()
+	plugin := &trafficPolicyPluginGwPass{}
 
-func boolPtr(b bool) *bool { return &b }
+	t.Run("autoHostRewrite true → RouteAction flag set", func(t *testing.T) {
+		policy := &TrafficPolicy{
+			spec: trafficPolicySpecIr{
+				autoHostRewrite: wrapperspb.Bool(true),
+			},
+		}
 
-// buildMinimalTP returns *trafficpolicyv1.TrafficPolicy with a single rule
-// that points at some dummy backend and the supplied autoHostRewrite value.
-func buildMinimalTP(ahr *bool) *trafficpolicyv1.TrafficPolicy {
-	return &trafficpolicyv1.TrafficPolicy{
-		Spec: trafficpolicyv1.TrafficPolicySpec{
-			// …other fields elided; only ahr matters for these tests
+		pCtx := &ir.RouteContext{Policy: policy}
+		out := &routev3.Route{
+			Action: &routev3.Route_Route{
+				Route: &routev3.RouteAction{},
+			},
+		}
+
+		require.NoError(t, plugin.ApplyForRoute(ctx, pCtx, out))
+
+		ra := out.GetRoute()
+		require.NotNil(t, ra)
+		assert.NotNil(t, ra.GetAutoHostRewrite())
+		assert.True(t, ra.GetAutoHostRewrite().GetValue())
+	})
+
+	t.Run("autoHostRewrite nil → RouteAction untouched", func(t *testing.T) {
+		policy := &TrafficPolicy{
+			spec: trafficPolicySpecIr{autoHostRewrite: nil},
+		}
+		pCtx := &ir.RouteContext{Policy: policy}
+		out := &routev3.Route{
+			Action: &routev3.Route_Route{Route: &routev3.RouteAction{}},
+		}
+
+		require.NoError(t, plugin.ApplyForRoute(ctx, pCtx, out))
+
+		ra := out.GetRoute()
+		require.NotNil(t, ra)
+		assert.Nil(t, ra.HostRewriteSpecifier) // nothing written
+	})
+}
+
+func minimalTrafficPolicyCR(val *bool) *v1alpha1.TrafficPolicy {
+	var ahr *bool
+	if val != nil {
+		ahr = val
+	}
+	return &v1alpha1.TrafficPolicy{
+		Spec: v1alpha1.TrafficPolicySpec{
 			AutoHostRewrite: ahr,
 		},
 	}
 }
-
-// extractAutoHostRewrite digs the generated IR to the single RouteAction that
-// the plugin creates and returns RouteAction.AutoHostRewrite (may be nil).
-func extractAutoHostRewrite(out *ir.Resources) *wrapperspb.BoolValue {
-	// We assume a single virtual-host → single route for these unit tests.
-	for _, r := range out.Routes { // map[string]*ir.Route
-		if ra := r.Action.GetRoute(); ra != nil { // *routev3.Route
-			return ra.AutoHostRewrite
-		}
-	}
-	return nil
-}
-
-
-
-var _ = ginkgo.Describe("AutoHostRewrite translation", func() {
-	ctx := context.Background()
-	builder := trafficpolicy.NewTrafficPolicyBuilder() // zero-dep constructor
-
-	type testCase struct {
-		name   string
-		input  *bool  // TrafficPolicy.Spec.autoHostRewrite
-		expect *bool  // value we expect in RouteAction.AutoHostRewrite
-	}
-
-	table := []testCase{
-		{name: "explicit true", input: boolPtr(true), expect: boolPtr(true)},
-		{name: "explicit false", input: boolPtr(false), expect: boolPtr(false)},
-		{name: "unset / nil", input: nil, expect: nil},
-	}
-
-	for _, tc := range table {
-		tc := tc // capture
-		ginkgo.It(tc.name, func() {
-			tp := buildMinimalTP(tc.input)
-
-			out, err := builder.Translate(ctx, tp)
-			Expect(err).NotTo(HaveOccurred())
-
-			got := extractAutoHostRewrite(out)
-			switch {
-			case tc.expect == nil:
-				Expect(got).To(BeNil())
-			default:
-				Expect(got).NotTo(BeNil())
-				Expect(got.Value).To(Equal(*tc.expect))
-			}
-		})
-	}
-})
