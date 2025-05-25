@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
-	
+
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/kubeutils"
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/requestutils/curl"
 	testmatchers "github.com/kgateway-dev/kgateway/v2/test/gomega/matchers"
@@ -21,14 +21,10 @@ import (
 	testdefaults "github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/defaults"
 )
 
-
-// Standard Ginkgo bootstrap so the package compiles and runs under the
-// `ginkgo` runner that the Makefile uses.
 func TestAutoHostRewrite(t *testing.T) {
 	gomega.RegisterFailHandler(ginkgo.Fail)
 	ginkgo.RunSpecs(t, "Auto-Host-Rewrite E2E Suite")
 }
-// Removed the undefined e2e.RegisterSuite call
 
 type testingSuite struct {
 	suite.Suite
@@ -43,7 +39,6 @@ func NewTestingSuite(ctx context.Context, ti *e2e.TestInstallation) suite.Testin
 	return &testingSuite{ctx: ctx, testInstallation: ti}
 }
 
-
 func (s *testingSuite) SetupSuite() {
 	s.commonManifests = []string{
 		testdefaults.CurlPodManifest,
@@ -52,10 +47,10 @@ func (s *testingSuite) SetupSuite() {
 		trafficPolicyManifest,
 	}
 	s.commonResources = []client.Object{
-		testdefaults.CurlPod,                 // curl pod
-		echoDeployment, echoService,          // echo backend
-		proxyDeployment, proxyService,        // gateway-proxy
-		route, trafficPolicy,                 // HTTPRoute + TrafficPolicy
+		testdefaults.CurlPod,
+		echoDeployment, echoService,
+		proxyDeployment, proxyService,
+		route, trafficPolicy,
 	}
 
 	for _, mf := range s.commonManifests {
@@ -63,7 +58,6 @@ func (s *testingSuite) SetupSuite() {
 	}
 	s.testInstallation.Assertions.EventuallyObjectsExist(s.ctx, s.commonResources...)
 
-	// wait for pods
 	s.testInstallation.Assertions.EventuallyPodsRunning(s.ctx, testdefaults.CurlPod.GetNamespace(),
 		metav1.ListOptions{LabelSelector: testdefaults.CurlPodLabelSelector})
 	s.testInstallation.Assertions.EventuallyPodsRunning(s.ctx, echoDeployment.GetNamespace(),
@@ -91,10 +85,9 @@ func (s *testingSuite) TestInvalidCombinationWebhookRejects() {
 	})
 
 	err := s.testInstallation.Actions.Kubectl().ApplyFile(s.ctx, manifest)
-	s.Require().Error(err) // admission webhook should reject
+	s.Require().Error(err)
 	s.Contains(err.Error(), "hostRewrite and autoHostRewrite are mutually exclusive")
 }
-
 
 func (s *testingSuite) assertResponse(path string, expectedStatus int) {
 	s.testInstallation.Assertions.AssertEventuallyConsistentCurlResponse(

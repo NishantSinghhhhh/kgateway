@@ -14,7 +14,6 @@ spec:
     spec:
       containers:
         - name: echo
-          # This image will reflect back headers (including `Host:`) in its response body
           image: gcr.io/k8s-staging-gateway-api/echo-basic:v20231214-v1.0.0-140-gf544a46e
           ports:
             - containerPort: 80

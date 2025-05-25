@@ -1,7 +1,8 @@
-apiVersion: trafficpolicy.kgateway.io/v1alpha1
+apiVersion: gateway.kgateway.dev/v1alpha1
 kind: TrafficPolicy
 metadata:
   name: echo-policy
+  namespace: auto-host-rewrite
 spec:
   targetRef:
     group: ""
