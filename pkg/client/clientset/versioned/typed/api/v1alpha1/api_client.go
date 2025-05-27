@@ -13,6 +13,7 @@ import (
 type GatewayV1alpha1Interface interface {
 	RESTClient() rest.Interface
 	BackendsGetter
+	BackendConfigPoliciesGetter
 	DirectResponsesGetter
 	GatewayExtensionsGetter
 	GatewayParametersesGetter
@@ -27,6 +28,10 @@ type GatewayV1alpha1Client struct {
 
 func (c *GatewayV1alpha1Client) Backends(namespace string) BackendInterface {
 	return newBackends(c, namespace)
+}
+
+func (c *GatewayV1alpha1Client) BackendConfigPolicies(namespace string) BackendConfigPolicyInterface {
+	return newBackendConfigPolicies(c, namespace)
 }
 
 func (c *GatewayV1alpha1Client) DirectResponses(namespace string) DirectResponseInterface {
