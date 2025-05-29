@@ -12,40 +12,47 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/fsutils"
 )
 
-const namespace = "auto-host-rewrite"
-
 var (
-	backendManifest              = get("backend.yaml")
-	httprouteManifest            = get("httproute.yaml")
-	trafficPolicyManifest        = get("trafficpolicy.yaml")
-	invalidTrafficPolicyManifest = get("invalid_trafficpolicy.yaml")
-)
+	backendManifest       = filepath.Join(fsutils.MustGetThisDir(), "testdata", "backend.yaml")
+	httprouteManifest     = filepath.Join(fsutils.MustGetThisDir(), "testdata", "httproute.yaml")
+	trafficPolicyManifest = filepath.Join(fsutils.MustGetThisDir(), "testdata", "trafficpolicy.yaml")
 
-var (
-	proxyObjectMeta = metav1.ObjectMeta{Name: "gw", Namespace: namespace}
+	invalidTrafficPolicyManifest = filepath.Join(
+		fsutils.MustGetThisDir(), "testdata", "invalid_trafficpolicy.yaml")
 
+	/* objects from gateway manifest (gw.yaml) */
+	proxyObjectMeta = metav1.ObjectMeta{
+		Name:      "gw",
+		Namespace: "default",
+	}
 	proxyDeployment = &appsv1.Deployment{ObjectMeta: proxyObjectMeta}
 	proxyService    = &corev1.Service{ObjectMeta: proxyObjectMeta}
-)
 
-var (
+	/* backend service + deployment */
 	echoDeployment = &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "echo", Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "echo",
+			Namespace: "default",
+		},
 	}
 	echoService = &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "echo", Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "echo",
+			Namespace: "default",
+		},
 	}
-)
 
-var (
+	/* route + traffic-policy */
 	route = &gwv1.HTTPRoute{
-		ObjectMeta: metav1.ObjectMeta{Name: "echo-route", Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "echo-route",
+			Namespace: "default",
+		},
 	}
 	trafficPolicy = &v1alpha1.TrafficPolicy{
-		ObjectMeta: metav1.ObjectMeta{Name: "auto-host-rewrite", Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "auto-host-rewrite",
+			Namespace: "default",
+		},
 	}
 )
-
-func get(file string) string {
-	return filepath.Join(fsutils.MustGetThisDir(), "input", file)
-}

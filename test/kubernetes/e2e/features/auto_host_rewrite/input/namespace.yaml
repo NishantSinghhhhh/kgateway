@@ -1,5 +1,0 @@
-# filepath: /home/nishant/LOCAL_DISK_D/Kgateway/kgateway/test/kubernetes/e2e/features/auto_host_rewrite/input/namespace.yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: auto-host-rewrite
