@@ -69,6 +69,10 @@ type TrafficPolicySpec struct {
 	// +optional
 	RateLimit *RateLimit `json:"rateLimit,omitempty"`
 
+	// Cors specifies the CORS configuration for the policy.
+	// +optional
+	Cors *CorsPolicy `json:"cors,omitempty"`
+
 	// AutoHostRewrite rewrites the Host header to the DNS name of the selected upstream.
 	// Only honoured for HTTPRoute targets.
 	// +kubebuilder:validation:Enum=true;false
@@ -337,4 +341,9 @@ type RateLimitDescriptorEntryGeneric struct {
 	// Value is the static value for this descriptor entry.
 	// +required
 	Value string `json:"value"`
+}
+
+type CorsPolicy struct {
+	// +kubebuilder:pruning:PreserveUnknownFields
+	*gwv1.HTTPCORSFilter `json:",inline"`
 }
