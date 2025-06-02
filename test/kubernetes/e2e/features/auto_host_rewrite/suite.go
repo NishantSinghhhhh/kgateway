@@ -20,8 +20,6 @@ import (
 	testdefaults "github.com/kgateway-dev/kgateway/v2/test/kubernetes/e2e/defaults"
 )
 
-const namespace = "auto-host-rewrite"
-
 var _ e2e.NewSuiteFunc = NewTestingSuite // makes the suite discoverable
 
 type testingSuite struct {

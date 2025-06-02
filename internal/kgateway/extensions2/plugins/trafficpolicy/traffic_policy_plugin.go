@@ -11,7 +11,8 @@ import (
 
 	envoy_core_v3 "github.com/envoyproxy/go-control-plane/envoy/config/core/v3"
 	ratelimitv3 "github.com/envoyproxy/go-control-plane/envoy/config/ratelimit/v3"
-	route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
+
+	// route "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	exteniondynamicmodulev3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
 	corsv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/cors/v3"
@@ -140,7 +141,6 @@ type trafficPolicySpecIr struct {
 	localRateLimit             *localratelimitv3.LocalRateLimit
 	rateLimit                  *RateLimitIR
 	cors                       *CorsIR
-	errors                     []error
 	autoHostRewrite            *wrapperspb.BoolValue
 }
 
@@ -582,7 +582,7 @@ func (p *trafficPolicyPluginGwPass) ApplyForRoute(ctx context.Context, pCtx *ir.
 
 	if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
 		if ra := outputRoute.GetRoute(); ra != nil {
-			ra.HostRewriteSpecifier = &route.RouteAction_AutoHostRewrite{
+			ra.HostRewriteSpecifier = &routev3.RouteAction_AutoHostRewrite{
 				AutoHostRewrite: policy.spec.autoHostRewrite,
 			}
 		}
