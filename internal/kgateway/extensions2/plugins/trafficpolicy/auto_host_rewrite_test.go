@@ -7,15 +7,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
-	"github.com/onsi/gomega"
+	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/wrapperspb"
-	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
-	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
-)
 
+	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
+)
 
 func TestTranslate_SetsAutoHostRewrite(t *testing.T) {
 	boolPtr := func(b bool) *bool { return &b }

@@ -1493,6 +1493,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: autoHostRewrite
       type:
         scalar: boolean
+    - name: cors
+      type:
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.CorsPolicy
     - name: extAuth
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.ExtAuthPolicy

@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"github.com/onsi/gomega"
 	"path/filepath"
+
+	"github.com/onsi/gomega"
 	"github.com/stretchr/testify/suite"
-	"github.com/kgateway-dev/kgateway/v2/pkg/utils/fsutils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/kgateway-dev/kgateway/v2/pkg/utils/fsutils"
 
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/kubeutils"
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/requestutils/curl"
@@ -41,45 +43,45 @@ func NewTestingSuite(ctx context.Context, ti *e2e.TestInstallation) suite.Testin
 func (s *testingSuite) SetupSuite() {
 	// 1) first create the namespace itself
 	nsManifest := filepath.Join(fsutils.MustGetThisDir(), "testdata", "namespace.yaml")
-  
+
 	s.commonManifests = []string{
-	  nsManifest,
-	  testdefaults.CurlPodManifest,
-	  backendManifest,
-	  httprouteManifest,
-	  trafficPolicyManifest,
+		nsManifest,
+		testdefaults.CurlPodManifest,
+		backendManifest,
+		httprouteManifest,
+		trafficPolicyManifest,
 	}
 	s.commonResources = []client.Object{
-	  testdefaults.CurlPod,
-	  echoDeployment, echoService,
-	  proxyDeployment, proxyService,
-	  route, trafficPolicy,
+		testdefaults.CurlPod,
+		echoDeployment, echoService,
+		proxyDeployment, proxyService,
+		route, trafficPolicy,
 	}
-  
+
 	for _, mf := range s.commonManifests {
-	  s.Require().NoError(
-		s.testInstallation.Actions.Kubectl().ApplyFile(s.ctx, mf),
-		"apply "+mf,
-	  )
+		s.Require().NoError(
+			s.testInstallation.Actions.Kubectl().ApplyFile(s.ctx, mf),
+			"apply "+mf,
+		)
 	}
 	s.testInstallation.Assertions.EventuallyObjectsExist(s.ctx, s.commonResources...)
-  
+
 	// wait for all pods to actually come up
 	s.testInstallation.Assertions.EventuallyPodsRunning(s.ctx,
-	  testdefaults.CurlPod.GetNamespace(),
-	  metav1.ListOptions{LabelSelector: testdefaults.CurlPodLabelSelector},
+		testdefaults.CurlPod.GetNamespace(),
+		metav1.ListOptions{LabelSelector: testdefaults.CurlPodLabelSelector},
 	)
 	s.testInstallation.Assertions.EventuallyPodsRunning(s.ctx,
-	  echoDeployment.GetNamespace(),
-	  metav1.ListOptions{LabelSelector: "app=echo"},
+		echoDeployment.GetNamespace(),
+		metav1.ListOptions{LabelSelector: "app=echo"},
 	)
 	s.testInstallation.Assertions.EventuallyPodsRunning(s.ctx,
-	  proxyObjectMeta.GetNamespace(),
-	  metav1.ListOptions{
-		LabelSelector: fmt.Sprintf("app.kubernetes.io/name=%s", proxyObjectMeta.GetName()),
-	  },
+		proxyObjectMeta.GetNamespace(),
+		metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("app.kubernetes.io/name=%s", proxyObjectMeta.GetName()),
+		},
 	)
-  }
+}
 func (s *testingSuite) TearDownSuite() {
 	for _, mf := range s.commonManifests {
 		_ = s.testInstallation.Actions.Kubectl().DeleteFileSafe(s.ctx, mf)
@@ -106,18 +108,18 @@ func (s *testingSuite) TestInvalidCombinationWebhookRejects() {
 }
 
 func (s *testingSuite) assertResponse(path string, expectedStatus int) {
-    s.testInstallation.Assertions.AssertEventuallyConsistentCurlResponse(
-        s.ctx,
-        testdefaults.CurlPodExecOpt,
-        []curl.Option{
-            curl.WithPath(path),
-            curl.WithHost(kubeutils.ServiceFQDN(proxyObjectMeta)),
-            curl.WithHostHeader("foo.local"),
-            curl.WithPort(8080),
-        },
-        &testmatchers.HttpResponse{
-            StatusCode: expectedStatus,
-            Body:       gomega.ContainSubstring("Host: echo.default.svc.cluster.local"),
-        },
-    )
+	s.testInstallation.Assertions.AssertEventuallyConsistentCurlResponse(
+		s.ctx,
+		testdefaults.CurlPodExecOpt,
+		[]curl.Option{
+			curl.WithPath(path),
+			curl.WithHost(kubeutils.ServiceFQDN(proxyObjectMeta)),
+			curl.WithHostHeader("foo.local"),
+			curl.WithPort(8080),
+		},
+		&testmatchers.HttpResponse{
+			StatusCode: expectedStatus,
+			Body:       gomega.ContainSubstring("Host: echo.default.svc.cluster.local"),
+		},
+	)
 }

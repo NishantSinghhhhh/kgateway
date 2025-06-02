@@ -273,6 +273,11 @@ spec:
                     - CHAT_STREAMING
                     type: string
                 type: object
+              autoHostRewrite:
+                enum:
+                - true
+                - false
+                type: boolean
               cors:
                 properties:
                   allowCredentials:
@@ -333,11 +338,6 @@ spec:
                     type: integer
                 type: object
                 x-kubernetes-preserve-unknown-fields: true
-              autoHostRewrite:
-                enum:
-                - true
-                - false
-                type: boolean
               extAuth:
                 properties:
                   contextExtensions:
