@@ -198,7 +198,9 @@ func (d *TrafficPolicy) Equals(in any) bool {
 	if !d.spec.rateLimit.Equals(d2.spec.rateLimit) {
 		return false
 	}
-
+	if !d.spec.cors.Equals(d2.spec.cors) {
+		return false
+	}
 	// Handle nil cases
 	if (d.spec.autoHostRewrite == nil) != (d2.spec.autoHostRewrite == nil) {
 		return false
@@ -1101,7 +1103,6 @@ func (b *TrafficPolicyBuilder) Translate(
 		errors = append(errors, err)
 	}
 
-	// 🆕 Handle autoHostRewrite
 	if policyCR.Spec.AutoHostRewrite != nil && *policyCR.Spec.AutoHostRewrite {
 		outSpec.autoHostRewrite = wrapperspb.Bool(true)
 	}

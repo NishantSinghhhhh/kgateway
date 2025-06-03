@@ -75,7 +75,6 @@ type TrafficPolicySpec struct {
 
 	// AutoHostRewrite rewrites the Host header to the DNS name of the selected upstream.
 	// Only honoured for HTTPRoute targets.
-	// +kubebuilder:validation:Enum=true;false
 	AutoHostRewrite *bool `json:"autoHostRewrite,omitempty"`
 }
 
