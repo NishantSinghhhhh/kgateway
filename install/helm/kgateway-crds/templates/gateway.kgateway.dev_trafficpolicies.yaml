@@ -274,9 +274,6 @@ spec:
                     type: string
                 type: object
               autoHostRewrite:
-                enum:
-                - true
-                - false
                 type: boolean
               cors:
                 properties:
