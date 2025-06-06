@@ -1097,7 +1097,6 @@ func (b *TrafficPolicyBuilder) Translate(
 		}
 	}
 
-	// Apply ExtAuthz specific translation
 	err = b.extAuthForSpec(krtctx, policyCR, &outSpec)
 	if err != nil {
 		errors = append(errors, err)
