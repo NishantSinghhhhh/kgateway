@@ -249,6 +249,20 @@ func (p *trafficPolicyPluginGwPass) ApplyRouteConfigPlugin(ctx context.Context, 
 		return
 	}
 
+    if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
+        for vi, vh := range out.GetVirtualHosts() {
+            for ri, r := range vh.GetRoutes() {
+                if ra := r.GetRoute(); ra != nil {
+                    ra.HostRewriteSpecifier = &routev3.RouteAction_AutoHostRewrite{
+                        AutoHostRewrite: policy.spec.autoHostRewrite,
+                    }
+                    vh.Routes[ri] = r
+                }
+            }
+            out.VirtualHosts[vi] = vh
+        }
+    }
+
 	p.handlePolicies(pCtx.FilterChainName, &pCtx.TypedFilterConfig, policy.spec)
 }
 
