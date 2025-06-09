@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"google.golang.org/protobuf/types/known/wrapperspb"
 	"istio.io/istio/pkg/kube/krt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -96,6 +97,10 @@ func (b *TrafficPolicyBuilder) Translate(
 	err = corsForSpec(policyCR.Spec, &outSpec)
 	if err != nil {
 		errors = append(errors, err)
+	}
+
+	if policyCR.Spec.AutoHostRewrite != nil {
+		outSpec.autoHostRewrite = wrapperspb.Bool(*policyCR.Spec.AutoHostRewrite)
 	}
 
 	for _, err := range errors {

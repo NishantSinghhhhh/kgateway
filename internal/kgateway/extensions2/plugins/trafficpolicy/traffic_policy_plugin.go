@@ -83,8 +83,7 @@ type trafficPolicySpecIr struct {
 	localRateLimit             *localratelimitv3.LocalRateLimit
 	rateLimit                  *GlobalRateLimitIR
 	cors                       *CorsIR
-	autoHostRewrite *wrapperspb.BoolValue
-
+	autoHostRewrite            *wrapperspb.BoolValue
 }
 
 func (d *TrafficPolicy) CreationTime() time.Time {
@@ -260,12 +259,12 @@ func (p *trafficPolicyPluginGwPass) ApplyVhostPlugin(ctx context.Context, pCtx *
 	}
 
 	if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
-		for i, r := range out.Routes {
+		for i, r := range out.GetRoutes() {
 			if ra := r.GetRoute(); ra != nil {
 				ra.HostRewriteSpecifier = &routev3.RouteAction_AutoHostRewrite{
 					AutoHostRewrite: policy.spec.autoHostRewrite,
 				}
-				out.Routes[i] = r // writing back the modified Route
+				out.GetRoutes()[i] = r // writing back the modified Route
 			}
 		}
 	}
@@ -475,7 +474,7 @@ func (p *trafficPolicyPluginGwPass) HttpFilters(ctx context.Context, fcc ir.Filt
 			&transformationpb.FilterTransformations{},
 			plugins.AfterStage(plugins.FaultStage)))
 	}
-	
+
 	// register the transformation work once
 	if len(p.extAuthPerProvider.Providers[fcc.FilterChainName]) != 0 {
 		// register the filter that sets metadata so that it can have overrides on the route level
@@ -508,7 +507,6 @@ func (p *trafficPolicyPluginGwPass) HttpFilters(ctx context.Context, fcc ir.Filt
 		filters = append(filters, filter)
 	}
 
-	
 	// Add global rate limit filters from providers
 	for providerName, provider := range p.rateLimitPerProvider.Providers[fcc.FilterChainName] {
 		rateLimitFilter := provider.RateLimit
