@@ -243,42 +243,50 @@ func (p *TrafficPolicy) Name() string {
 	return "trafficpolicies"
 }
 
-func (p *trafficPolicyPluginGwPass) ApplyRouteConfigPlugin(ctx context.Context, pCtx *ir.RouteConfigContext, out *routev3.RouteConfiguration) {
-	policy, ok := pCtx.Policy.(*TrafficPolicy)
-	if !ok {
-		return
-	}
-
-    if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
-        for vi, vh := range out.GetVirtualHosts() {
-            for ri, r := range vh.GetRoutes() {
-                if ra := r.GetRoute(); ra != nil {
-                    ra.HostRewriteSpecifier = &routev3.RouteAction_AutoHostRewrite{
-                        AutoHostRewrite: policy.spec.autoHostRewrite,
-                    }
-                    vh.Routes[ri] = r
-                }
-            }
-            out.VirtualHosts[vi] = vh
-        }
-    }
-
-	p.handlePolicies(pCtx.FilterChainName, &pCtx.TypedFilterConfig, policy.spec)
-}
-
-func (p *trafficPolicyPluginGwPass) ApplyVhostPlugin(ctx context.Context, pCtx *ir.VirtualHostContext, out *routev3.VirtualHost) {
+func (p *trafficPolicyPluginGwPass) ApplyRouteConfigPlugin(
+	ctx context.Context,
+	pCtx *ir.RouteConfigContext,
+	out *routev3.RouteConfiguration,
+) {
 	policy, ok := pCtx.Policy.(*TrafficPolicy)
 	if !ok {
 		return
 	}
 
 	if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
-		for i, r := range out.GetRoutes() {
+		for vi, vh := range out.GetVirtualHosts() { // direct field
+			for ri, r := range vh.GetRoutes() { // direct field
+				if ra := r.GetRoute(); ra != nil {
+					ra.HostRewriteSpecifier = &routev3.RouteAction_AutoHostRewrite{
+						AutoHostRewrite: policy.spec.autoHostRewrite,
+					}
+					vh.GetRoutes()[ri] = r
+				}
+			}
+			out.GetVirtualHosts()[vi] = vh
+		}
+	}
+
+	p.handlePolicies(pCtx.FilterChainName, &pCtx.TypedFilterConfig, policy.spec)
+}
+
+func (p *trafficPolicyPluginGwPass) ApplyVhostPlugin(
+	ctx context.Context,
+	pCtx *ir.VirtualHostContext,
+	out *routev3.VirtualHost,
+) {
+	policy, ok := pCtx.Policy.(*TrafficPolicy)
+	if !ok {
+		return
+	}
+
+	if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
+		for i, r := range out.GetRoutes() { // direct field
 			if ra := r.GetRoute(); ra != nil {
 				ra.HostRewriteSpecifier = &routev3.RouteAction_AutoHostRewrite{
 					AutoHostRewrite: policy.spec.autoHostRewrite,
 				}
-				out.GetRoutes()[i] = r // writing back the modified Route
+				out.GetRoutes()[i] = r
 			}
 		}
 	}
