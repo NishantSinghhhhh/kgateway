@@ -52,3 +52,13 @@ listeners:
 routes:
 - name: listener~8080
   ignorePortInHostMatching: true
+  virtualHosts:
+  - name: reviews_service
+    domains:
+    - "*"
+    routes:
+    - match:
+        prefix: "/"
+      route:
+        cluster: reviews_gwtest_reviews_8080
+        autoHostRewrite: true
