@@ -43,7 +43,8 @@ type BackendConfigPolicyIR struct {
 	tcpKeepalive                  *corev3.TcpKeepalive
 	commonHttpProtocolOptions     *corev3.HttpProtocolOptions
 	http1ProtocolOptions          *corev3.Http1ProtocolOptions
-	sslConfig                     *envoyauth.UpstreamTlsContext
+	tlsConfig                     *envoyauth.UpstreamTlsContext
+	loadBalancerConfig            *LoadBalancerConfigIR
 }
 
 var logger = logging.New("backendconfigpolicy")
@@ -109,13 +110,20 @@ func (d *BackendConfigPolicyIR) Equals(other any) bool {
 		}
 	}
 
-	if (d.sslConfig == nil) != (d2.sslConfig == nil) {
+	if (d.tlsConfig == nil) != (d2.tlsConfig == nil) {
 		return false
 	}
-	if d.sslConfig != nil && d2.sslConfig != nil {
-		if !proto.Equal(d.sslConfig, d2.sslConfig) {
+	if d.tlsConfig != nil && d2.tlsConfig != nil {
+		if !proto.Equal(d.tlsConfig, d2.tlsConfig) {
 			return false
 		}
+	}
+
+	if (d.loadBalancerConfig == nil) != (d2.loadBalancerConfig == nil) {
+		return false
+	}
+	if !d.loadBalancerConfig.Equals(d2.loadBalancerConfig) {
+		return false
 	}
 
 	return true
@@ -193,6 +201,14 @@ func processBackend(_ context.Context, polir ir.PolicyIR, _ ir.BackendObjectIR, 
 	if pol.commonHttpProtocolOptions != nil {
 		if err := translatorutils.MutateHttpOptions(out, func(opts *envoy_upstreams_v3.HttpProtocolOptions) {
 			opts.CommonHttpProtocolOptions = pol.commonHttpProtocolOptions
+			if opts.GetUpstreamProtocolOptions() == nil {
+				// Envoy requires UpstreamProtocolOptions if CommonHttpProtocolOptions is set.
+				opts.UpstreamProtocolOptions = &envoy_upstreams_v3.HttpProtocolOptions_ExplicitHttpConfig_{
+					ExplicitHttpConfig: &envoy_upstreams_v3.HttpProtocolOptions_ExplicitHttpConfig{
+						ProtocolConfig: &envoy_upstreams_v3.HttpProtocolOptions_ExplicitHttpConfig_HttpProtocolOptions{},
+					},
+				}
+			}
 		}); err != nil {
 			logger.Error("failed to apply common http protocol options", "error", err)
 		}
@@ -212,10 +228,10 @@ func processBackend(_ context.Context, polir ir.PolicyIR, _ ir.BackendObjectIR, 
 		}
 	}
 
-	if pol.sslConfig != nil {
-		typedConfig, err := utils.MessageToAny(pol.sslConfig)
+	if pol.tlsConfig != nil {
+		typedConfig, err := utils.MessageToAny(pol.tlsConfig)
 		if err != nil {
-			logger.Error("failed to convert ssl config to any", "error", err)
+			logger.Error("failed to convert tls config to any", "error", err)
 			return
 		}
 		out.TransportSocket = &corev3.TransportSocket{
@@ -225,6 +241,8 @@ func processBackend(_ context.Context, polir ir.PolicyIR, _ ir.BackendObjectIR, 
 			},
 		}
 	}
+
+	applyLoadBalancerConfig(pol.loadBalancerConfig, out)
 }
 
 func translate(commoncol *common.CommonCollections, krtctx krt.HandlerContext, pol *v1alpha1.BackendConfigPolicy) (*BackendConfigPolicyIR, error) {
@@ -255,12 +273,16 @@ func translate(commoncol *common.CommonCollections, krtctx krt.HandlerContext, p
 		ir.http1ProtocolOptions = http1ProtocolOptions
 	}
 
-	if pol.Spec.SSLConfig != nil {
-		sslConfig, err := translateSSLConfig(NewDefaultSecretGetter(commoncol.Secrets, krtctx), pol.Spec.SSLConfig, pol.Namespace)
+	if pol.Spec.TLS != nil {
+		tlsConfig, err := translateTLSConfig(NewDefaultSecretGetter(commoncol.Secrets, krtctx), pol.Spec.TLS, pol.Namespace)
 		if err != nil {
 			return &ir, err
 		}
-		ir.sslConfig = sslConfig
+		ir.tlsConfig = tlsConfig
+	}
+
+	if pol.Spec.LoadBalancer != nil {
+		ir.loadBalancerConfig = translateLoadBalancerConfig(pol.Spec.LoadBalancer)
 	}
 
 	return &ir, nil
@@ -297,16 +319,6 @@ func translateCommonHttpProtocolOptions(commonHttpProtocolOptions *v1alpha1.Comm
 		out.MaxStreamDuration = durationpb.New(commonHttpProtocolOptions.MaxStreamDuration.Duration)
 	}
 
-	if commonHttpProtocolOptions.HeadersWithUnderscoresAction != nil {
-		switch *commonHttpProtocolOptions.HeadersWithUnderscoresAction {
-		case v1alpha1.HeadersWithUnderscoresActionAllow:
-			out.HeadersWithUnderscoresAction = corev3.HttpProtocolOptions_ALLOW
-		case v1alpha1.HeadersWithUnderscoresActionRejectRequest:
-			out.HeadersWithUnderscoresAction = corev3.HttpProtocolOptions_REJECT_REQUEST
-		case v1alpha1.HeadersWithUnderscoresActionDropHeader:
-			out.HeadersWithUnderscoresAction = corev3.HttpProtocolOptions_DROP_HEADER
-		}
-	}
 	return out
 }
 

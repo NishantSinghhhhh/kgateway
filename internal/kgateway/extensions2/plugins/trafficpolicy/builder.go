@@ -99,6 +99,12 @@ func (b *TrafficPolicyBuilder) Translate(
 		errors = append(errors, err)
 	}
 
+	// Apply csrf specific translation
+	err = csrfForSpec(policyCR.Spec, &outSpec)
+	if err != nil {
+		errors = append(errors, err)
+	}
+
 	if policyCR.Spec.AutoHostRewrite != nil {
 		outSpec.autoHostRewrite = wrapperspb.Bool(*policyCR.Spec.AutoHostRewrite)
 	}
