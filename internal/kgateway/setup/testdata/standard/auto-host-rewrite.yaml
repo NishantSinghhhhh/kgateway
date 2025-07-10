@@ -73,19 +73,6 @@ spec:
         - name: reviews
           port: 8080
 ---
-# TrafficPolicy on the Gateway itself
-apiVersion: gateway.kgateway.dev/v1alpha1
-kind: TrafficPolicy
-metadata:
-  name: gw-auto-hostrewrite-policy
-  namespace: gwtest
-spec:
-  targetRefs:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      name: http-gw-for-test
-  autoHostRewrite: true
----
 # TrafficPolicy on the HTTPRoute only
 apiVersion: gateway.kgateway.dev/v1alpha1
 kind: TrafficPolicy
@@ -97,4 +84,4 @@ spec:
     - group: gateway.networking.k8s.io
       kind: HTTPRoute
       name: my-route
-  autoHostRewrite: false
+  autoHostRewrite: true

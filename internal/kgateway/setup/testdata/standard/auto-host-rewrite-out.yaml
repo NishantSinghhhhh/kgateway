@@ -1,31 +1,35 @@
 clusters:
 - connectTimeout: 5s
-  dnsLookupFamily: V4_PREFERRED
-  loadAssignment:
-    clusterName: reviews_gwtest_reviews_8080
-    endpoints:
-    - lbEndpoints:
-      - endpoint:
-          address:
-            socketAddress:
-              address: 10.244.1.11
-              portValue: 8080
-        loadBalancingWeight: 1
-      loadBalancingWeight: 1
-  metadata: {}
-  name: reviews_gwtest_reviews_8080
-  type: STATIC
-- edsClusterConfig:
+  edsClusterConfig:
     edsConfig:
       ads: {}
       resourceApiVersion: V3
+  ignoreHealthOnHostRemoval: true
   metadata: {}
   name: kube_default_kubernetes_443
   type: EDS
-
+- connectTimeout: 5s
+  edsClusterConfig:
+    edsConfig:
+      ads: {}
+      resourceApiVersion: V3
+  ignoreHealthOnHostRemoval: true
+  metadata: {}
+  name: kube_gwtest_reviews_8080
+  type: EDS
+endpoints:
+- clusterName: kube_gwtest_reviews_8080
+  endpoints:
+  - lbEndpoints:
+    - endpoint:
+        address:
+          socketAddress:
+            address: 10.244.1.11
+            portValue: 8080
+      loadBalancingWeight: 1
+    loadBalancingWeight: 1
 listeners:
-- name: listener~8080
-  address:
+- address:
     socketAddress:
       address: '::'
       ipv4Compat: true
@@ -35,8 +39,10 @@ listeners:
     - name: envoy.filters.network.http_connection_manager
       typedConfig:
         '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
-        statPrefix: http
-        useRemoteAddress: true
+        httpFilters:
+        - name: envoy.filters.http.router
+          typedConfig:
+            '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
         mergeSlashes: true
         normalizePath: true
         rds:
@@ -44,21 +50,22 @@ listeners:
             ads: {}
             resourceApiVersion: V3
           routeConfigName: listener~8080
-        httpFilters:
-        - name: envoy.filters.http.router
-          typedConfig:
-            '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
-
+        statPrefix: http
+        useRemoteAddress: true
+    name: listener~8080
+  name: listener~8080
 routes:
-- name: listener~8080
-  ignorePortInHostMatching: true
+- ignorePortInHostMatching: true
+  name: listener~8080
   virtualHosts:
-  - name: reviews_service
-    domains:
-    - "*"
+  - domains:
+    - www.example.com
+    name: listener~8080~www_example_com
     routes:
     - match:
-        prefix: "/"
+        prefix: /
+      name: listener~8080~www_example_com-route-0-httproute-my-route-gwtest-0-0-matcher-0
       route:
-        cluster: reviews_gwtest_reviews_8080
         autoHostRewrite: true
+        cluster: kube_gwtest_reviews_8080
+        clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR

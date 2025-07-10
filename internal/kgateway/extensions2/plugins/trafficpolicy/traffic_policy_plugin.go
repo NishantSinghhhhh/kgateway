@@ -260,20 +260,6 @@ func (p *trafficPolicyPluginGwPass) ApplyRouteConfigPlugin(
 		return
 	}
 
-	if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
-		for vi, vh := range out.GetVirtualHosts() { // direct field
-			for ri, r := range vh.GetRoutes() { // direct field
-				if ra := r.GetRoute(); ra != nil {
-					ra.HostRewriteSpecifier = &routev3.RouteAction_AutoHostRewrite{
-						AutoHostRewrite: policy.spec.autoHostRewrite,
-					}
-					vh.GetRoutes()[ri] = r
-				}
-			}
-			out.GetVirtualHosts()[vi] = vh
-		}
-	}
-
 	p.handlePolicies(pCtx.FilterChainName, &pCtx.TypedFilterConfig, policy.spec)
 }
 
@@ -285,17 +271,6 @@ func (p *trafficPolicyPluginGwPass) ApplyVhostPlugin(
 	policy, ok := pCtx.Policy.(*TrafficPolicy)
 	if !ok {
 		return
-	}
-
-	if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
-		for i, r := range out.GetRoutes() { // direct field
-			if ra := r.GetRoute(); ra != nil {
-				ra.HostRewriteSpecifier = &routev3.RouteAction_AutoHostRewrite{
-					AutoHostRewrite: policy.spec.autoHostRewrite,
-				}
-				out.GetRoutes()[i] = r
-			}
-		}
 	}
 
 	p.handlePolicies(pCtx.FilterChainName, &pCtx.TypedFilterConfig, policy.spec)
@@ -357,13 +332,6 @@ func (p *trafficPolicyPluginGwPass) ApplyForRoute(ctx context.Context, pCtx *ir.
 
 		p.setTransformationInChain[pCtx.FilterChainName] = true
 
-		if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
-			if ra := outputRoute.GetRoute(); ra != nil {
-				ra.HostRewriteSpecifier = &routev3.RouteAction_AutoHostRewrite{
-					AutoHostRewrite: policy.spec.autoHostRewrite,
-				}
-			}
-		}
 	}
 
 	if policy.spec.AI != nil {
@@ -394,6 +362,15 @@ func (p *trafficPolicyPluginGwPass) ApplyForRoute(ctx context.Context, pCtx *ir.
 			p.processAITrafficPolicy(&pCtx.TypedFilterConfig, policy.spec.AI)
 		}
 	}
+
+	if policy.spec.autoHostRewrite != nil && policy.spec.autoHostRewrite.GetValue() {
+		if ra := outputRoute.GetRoute(); ra != nil {
+			ra.HostRewriteSpecifier = &routev3.RouteAction_AutoHostRewrite{
+				AutoHostRewrite: policy.spec.autoHostRewrite,
+			}
+		}
+	}
+
 	p.handlePolicies(pCtx.FilterChainName, &pCtx.TypedFilterConfig, policy.spec)
 
 	return nil
