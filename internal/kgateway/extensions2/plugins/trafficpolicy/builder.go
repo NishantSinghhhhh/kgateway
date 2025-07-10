@@ -109,6 +109,8 @@ func (b *TrafficPolicyBuilder) Translate(
 		outSpec.autoHostRewrite = wrapperspb.Bool(*policyCR.Spec.AutoHostRewrite)
 	}
 
+	bufferForSpec(policyCR.Spec, &outSpec)
+
 	for _, err := range errors {
 		logger.Error("error translating gateway extension", "namespace", policyCR.GetNamespace(), "name", policyCR.GetName(), "error", err)
 	}

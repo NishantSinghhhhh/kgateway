@@ -10,6 +10,7 @@ import (
 
 	routev3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	exteniondynamicmodulev3 "github.com/envoyproxy/go-control-plane/envoy/extensions/dynamic_modules/v3"
+	bufferv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/buffer/v3"
 	corsv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/cors/v3"
 	envoy_csrf_v3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/csrf/v3"
 	dynamicmodulesv3 "github.com/envoyproxy/go-control-plane/envoy/extensions/filters/http/dynamic_modules/v3"
@@ -33,15 +34,16 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	extensionsplug "github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/plugin"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/pluginutils"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/plugins"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/reports"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	"github.com/kgateway-dev/kgateway/v2/pkg/client/clientset/versioned"
 	"github.com/kgateway-dev/kgateway/v2/pkg/logging"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/policy"
+	pluginsdkutils "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/utils"
+	"github.com/kgateway-dev/kgateway/v2/pkg/reports"
+	"github.com/kgateway-dev/kgateway/v2/pkg/validator"
 )
 
 const (
@@ -86,6 +88,7 @@ type trafficPolicySpecIr struct {
 	cors                       *CorsIR
 	csrf                       *CsrfIR
 	autoHostRewrite            *wrapperspb.BoolValue
+	buffer                     *BufferIR
 }
 
 func (d *TrafficPolicy) CreationTime() time.Time {
@@ -155,6 +158,10 @@ func (d *TrafficPolicy) Equals(in any) bool {
 		return false
 	}
 
+	if !d.spec.buffer.Equals(d2.spec.buffer) {
+		return false
+	}
+
 	return true
 }
 
@@ -172,6 +179,7 @@ type trafficPolicyPluginGwPass struct {
 	rateLimitPerProvider  ProviderNeededMap
 	corsInChain           map[string]*corsv3.Cors
 	csrfInChain           map[string]*envoy_csrf_v3.CsrfPolicy
+	bufferInChain         map[string]*bufferv3.Buffer
 }
 
 var _ ir.ProxyTranslationPass = &trafficPolicyPluginGwPass{}
@@ -203,6 +211,7 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 	gk := wellknown.TrafficPolicyGVK.GroupKind()
 
 	translator := NewTrafficPolicyBuilder(ctx, commoncol)
+	v := validator.New()
 
 	// TrafficPolicy IR will have TypedConfig -> implement backendroute method to add prompt guard, etc.
 	policyCol := krt.NewCollection(col, func(krtctx krt.HandlerContext, policyCR *v1alpha1.TrafficPolicy) *ir.PolicyWrapper {
@@ -214,11 +223,15 @@ func NewPlugin(ctx context.Context, commoncol *common.CommonCollections) extensi
 		}
 
 		policyIR, errors := translator.Translate(krtctx, policyCR)
+		if err := policyIR.Validate(ctx, v, commoncol.Settings.RouteReplacementMode); err != nil {
+			logger.Error("validation failed", "policy", policyCR.Name, "error", err)
+			errors = append(errors, err)
+		}
 		pol := &ir.PolicyWrapper{
 			ObjectSource: objSrc,
 			Policy:       policyCR,
 			PolicyIR:     policyIR,
-			TargetRefs:   pluginutils.TargetRefsToPolicyRefsWithSectionName(policyCR.Spec.TargetRefs, policyCR.Spec.TargetSelectors),
+			TargetRefs:   pluginsdkutils.TargetRefsToPolicyRefsWithSectionName(policyCR.Spec.TargetRefs, policyCR.Spec.TargetSelectors),
 			Errors:       errors,
 		}
 		return pol
@@ -546,6 +559,16 @@ func (p *trafficPolicyPluginGwPass) HttpFilters(ctx context.Context, fcc ir.Filt
 		filters = append(filters, filter)
 	}
 
+	// Add Buffer filter to enable buffer for the listener.
+	// Requires the buffer policy to be set as typed_per_filter_config.
+	if p.bufferInChain[fcc.FilterChainName] != nil {
+		filter := plugins.MustNewStagedFilter(bufferFilterName,
+			p.bufferInChain[fcc.FilterChainName],
+			plugins.DuringStage(plugins.RouteStage))
+		filter.Filter.Disabled = true
+		filters = append(filters, filter)
+	}
+
 	if len(filters) == 0 {
 		return nil, nil
 	}
@@ -568,6 +591,8 @@ func (p *trafficPolicyPluginGwPass) handlePolicies(fcn string, typedFilterConfig
 
 	// Apply CSRF configuration if present
 	p.handleCsrf(fcn, typedFilterConfig, spec.csrf)
+
+	p.handleBuffer(fcn, typedFilterConfig, spec.buffer)
 }
 
 func (p *trafficPolicyPluginGwPass) SupportsPolicyMerge() bool {
@@ -627,6 +652,7 @@ func mergePolicies(policies []ir.PolicyAtt) ir.PolicyAtt {
 		mergeOrigins := MergeTrafficPolicies(merged, p2, p2Ref, mergeOpts)
 		maps.Copy(out.MergeOrigins, mergeOrigins)
 		out.HierarchicalPriority = policies[i].HierarchicalPriority
+		out.Errors = append(out.Errors, policies[i].Errors...)
 	}
 
 	return out
@@ -688,5 +714,12 @@ func MergeTrafficPolicies(
 		p1.spec.autoHostRewrite = p2.spec.autoHostRewrite
 		mergeOrigins["autoHostRewrite"] = p2Ref
 	}
+
+	// Handle buffer policy merging
+	if policy.IsMergeable(p1.spec.buffer, p2.spec.buffer, mergeOpts) {
+		p1.spec.buffer = p2.spec.buffer
+		mergeOrigins["buffer"] = p2Ref
+	}
+
 	return mergeOrigins
 }

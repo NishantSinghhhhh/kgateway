@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"regexp"
 	"slices"
 
@@ -12,16 +13,16 @@ import (
 	envoy_config_route_v3 "github.com/envoyproxy/go-control-plane/envoy/config/route/v3"
 	envoy_type_matcher_v3 "github.com/envoyproxy/go-control-plane/envoy/type/matcher/v3"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/reports"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/translator/routeutils"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
 	reportssdk "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/reporter"
+	"github.com/kgateway-dev/kgateway/v2/pkg/reports"
+	"github.com/kgateway-dev/kgateway/v2/pkg/settings"
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/regexutils"
 )
 
@@ -36,6 +37,7 @@ type httpRouteConfigurationTranslator struct {
 	requireTlsOnVirtualHosts bool
 	PluginPass               TranslationPassPlugins
 	logger                   *slog.Logger
+	routeReplacementMode     settings.RouteReplacementMode
 }
 
 const WebSocketUpgradeType = "websocket"
@@ -68,7 +70,7 @@ func (h *httpRouteConfigurationTranslator) ComputeRouteConfiguration(ctx context
 	}
 
 	cfg.VirtualHosts = h.computeVirtualHosts(ctx, vhosts)
-	cfg.TypedPerFilterConfig = toPerFilterConfigMap(typedPerFilterConfigRoute)
+	cfg.TypedPerFilterConfig = typedPerFilterConfigRoute.ToAnyMap()
 
 	// Gateway API spec requires that port values in HTTP Host headers be ignored when performing a match
 	// See https://gateway-api.sigs.k8s.io/reference/spec/#gateway.networking.k8s.io/v1.HTTPRouteSpec - hostnames field
@@ -131,7 +133,7 @@ func (h *httpRouteConfigurationTranslator) computeVirtualHost(
 	typedPerFilterConfigRoute := ir.TypedFilterConfigMap(map[string]proto.Message{})
 	// run the http plugins that are attached to the listener or gateway on the virtual host
 	h.runVhostPlugins(ctx, virtualHost, out, typedPerFilterConfigRoute)
-	out.TypedPerFilterConfig = toPerFilterConfigMap(typedPerFilterConfigRoute)
+	out.TypedPerFilterConfig = typedPerFilterConfigRoute.ToAnyMap()
 
 	return out
 }
@@ -169,7 +171,7 @@ func (h *httpRouteConfigurationTranslator) envoyRoutes(
 	}
 
 	// apply typed per filter config from translating route action and route plugins
-	typedPerFilterConfig := toPerFilterConfigMap(backendConfigCtx.typedPerFilterConfigRoute)
+	typedPerFilterConfig := backendConfigCtx.typedPerFilterConfigRoute.ToAnyMap()
 	if out.GetTypedPerFilterConfig() == nil {
 		out.TypedPerFilterConfig = typedPerFilterConfig
 	} else {
@@ -179,13 +181,9 @@ func (h *httpRouteConfigurationTranslator) envoyRoutes(
 			}
 		}
 	}
-	out.RequestHeadersToAdd = append(out.GetRequestHeadersToAdd(), backendConfigCtx.RequestHeadersToAdd...)
-	out.RequestHeadersToRemove = append(out.GetRequestHeadersToRemove(), backendConfigCtx.RequestHeadersToRemove...)
-	out.ResponseHeadersToAdd = append(out.GetResponseHeadersToAdd(), backendConfigCtx.ResponseHeadersToAdd...)
-	out.ResponseHeadersToRemove = append(out.GetResponseHeadersToRemove(), backendConfigCtx.ResponseHeadersToRemove...)
 
 	if err == nil && out.GetAction() == nil {
-		if in.Delegates {
+		if in.Delegates && in.Error == nil {
 			return nil
 		} else {
 			err = errors.New("no action specified")
@@ -200,39 +198,41 @@ func (h *httpRouteConfigurationTranslator) envoyRoutes(
 			Reason:  gwv1.RouteReasonUnsupportedValue,
 			Message: fmt.Sprintf("Dropped Rule (%d): %v", in.MatchIndex, err),
 		})
-		//  TODO: we currently drop the route which is not good;
-		//    we should implement route replacement.
-		// out.Reset()
-		// out.Action = &envoy_config_route_v3.Route_DirectResponse{
-		// 	DirectResponse: &envoy_config_route_v3.DirectResponseAction{
-		// 		Status: http.StatusInternalServerError,
-		// 	},
-		// }
-		out = nil
+
+		switch h.routeReplacementMode {
+		case settings.RouteReplacementStandard, settings.RouteReplacementStrict:
+			// Unset the TypedPerFilterConfig when the route is replaced with a direct response
+			out.TypedPerFilterConfig = nil
+			// Replace invalid route with a direct response
+			out.Action = &envoy_config_route_v3.Route_DirectResponse{
+				DirectResponse: &envoy_config_route_v3.DirectResponseAction{
+					Status: http.StatusInternalServerError,
+					Body: &envoy_config_core_v3.DataSource{
+						Specifier: &envoy_config_core_v3.DataSource_InlineString{
+							InlineString: `invalid route configuration detected and replaced with a direct response.`,
+						},
+					},
+				},
+			}
+			return out
+		default:
+			// Drop the route entirely (legacy behavior, will be removed in the future)
+			return nil
+		}
 	}
+
+	out.RequestHeadersToAdd = append(out.GetRequestHeadersToAdd(), backendConfigCtx.RequestHeadersToAdd...)
+	out.RequestHeadersToRemove = append(out.GetRequestHeadersToRemove(), backendConfigCtx.RequestHeadersToRemove...)
+	out.ResponseHeadersToAdd = append(out.GetResponseHeadersToAdd(), backendConfigCtx.ResponseHeadersToAdd...)
+	out.ResponseHeadersToRemove = append(out.GetResponseHeadersToRemove(), backendConfigCtx.ResponseHeadersToRemove...)
 
 	return out
 }
 
-func toPerFilterConfigMap(typedPerFilterConfig ir.TypedFilterConfigMap) map[string]*anypb.Any {
-	typedPerFilterConfigAny := map[string]*anypb.Any{}
-	for k, v := range typedPerFilterConfig {
-		if anyMsg, ok := v.(*anypb.Any); ok {
-			typedPerFilterConfigAny[k] = anyMsg
-			continue
-		}
-		config, err := utils.MessageToAny(v)
-		if err != nil {
-			// TODO: error on status? this should never happen..
-			logger.Error("unexpected marshalling error", "error", err)
-			continue
-		}
-		typedPerFilterConfigAny[k] = config
-	}
-	return typedPerFilterConfigAny
-}
-
-func (h *httpRouteConfigurationTranslator) runVhostPlugins(ctx context.Context, virtualHost *ir.VirtualHost, out *envoy_config_route_v3.VirtualHost,
+func (h *httpRouteConfigurationTranslator) runVhostPlugins(
+	ctx context.Context,
+	virtualHost *ir.VirtualHost,
+	out *envoy_config_route_v3.VirtualHost,
 	typedPerFilterConfig ir.TypedFilterConfigMap,
 ) {
 	for _, gk := range virtualHost.AttachedPolicies.ApplyOrderedGroupKinds() {
@@ -286,13 +286,13 @@ func (h *httpRouteConfigurationTranslator) runRoutePlugins(
 	}
 
 	var errs []error
-
 	applyForPolicy := func(ctx context.Context, pass *TranslationPass, pctx *ir.RouteContext, out *envoy_config_route_v3.Route) {
 		err := pass.ApplyForRoute(ctx, pctx, out)
 		if err != nil {
 			errs = append(errs, err)
 		}
 	}
+
 	for _, gk := range attachedPolicies.ApplyOrderedGroupKinds() {
 		pols := attachedPolicies.Policies[gk]
 		pass := h.PluginPass[gk]
@@ -307,15 +307,16 @@ func (h *httpRouteConfigurationTranslator) runRoutePlugins(
 			TypedFilterConfig: typedPerFilterConfig,
 		}
 		for _, pol := range mergePolicies(pass, pols) {
-			// TODO: should we append pol.Error to errs?
-			// i.e. errs = append(errs, pol.Error)
+			// skip plugin application if we encountered any errors while constructing
+			// the policy IR.
+			if len(pol.Errors) > 0 {
+				errs = append(errs, pol.Errors...)
+				continue
+			}
 			pctx.Policy = pol.PolicyIr
 			applyForPolicy(ctx, pass, pctx, out)
 		}
-
-		// TODO: check return value, if error returned, log error and report condition
 	}
-
 	err := errors.Join(errs...)
 	if err != nil {
 		routeReport.SetCondition(reportssdk.RouteCondition{
@@ -431,7 +432,7 @@ func (h *httpRouteConfigurationTranslator) translateRouteAction(
 		backendConfigCtx.ResponseHeadersToRemove = pCtx.ResponseHeadersToRemove
 
 		// Translating weighted clusters needs the typed per filter config on each cluster
-		cw.TypedPerFilterConfig = toPerFilterConfigMap(backendConfigCtx.typedPerFilterConfigRoute)
+		cw.TypedPerFilterConfig = backendConfigCtx.typedPerFilterConfigRoute.ToAnyMap()
 		cw.RequestHeadersToAdd = backendConfigCtx.RequestHeadersToAdd
 		cw.RequestHeadersToRemove = backendConfigCtx.RequestHeadersToRemove
 		cw.ResponseHeadersToAdd = backendConfigCtx.ResponseHeadersToAdd
@@ -439,7 +440,6 @@ func (h *httpRouteConfigurationTranslator) translateRouteAction(
 		clusters = append(clusters, cw)
 	}
 
-	// TODO: i think envoy nacks if all weights are 0, we should error on that.
 	action := outRoute.GetRoute()
 	if action == nil {
 		action = &envoy_config_route_v3.RouteAction{
@@ -501,10 +501,28 @@ func validateEnvoyRoute(r *envoy_config_route_v3.Route) error {
 	validatePath(re.GetSchemeRedirect(), &errs)
 	validatePrefixRewrite(route.GetPrefixRewrite(), &errs)
 	validatePrefixRewrite(re.GetPrefixRewrite(), &errs)
+	validateWeightedClusters(route.GetWeightedClusters().GetClusters(), &errs)
 	if len(errs) == 0 {
 		return nil
 	}
 	return fmt.Errorf("error %s: %w", r.GetName(), errors.Join(errs...))
+}
+
+func validateWeightedClusters(clusters []*envoy_config_route_v3.WeightedCluster_ClusterWeight, errs *[]error) {
+	if len(clusters) == 0 {
+		return
+	}
+
+	allZeroWeight := true
+	for _, cluster := range clusters {
+		if cluster.GetWeight().GetValue() > 0 {
+			allZeroWeight = false
+			break
+		}
+	}
+	if allZeroWeight {
+		*errs = append(*errs, errors.New("All backend weights are 0. At least one backendRef in the HTTPRoute rule must specify a non-zero weight"))
+	}
 }
 
 // creates Envoy routes for each matcher provided on our Gateway route
@@ -523,7 +541,7 @@ func (h *httpRouteConfigurationTranslator) initRoutes(
 	//	}
 
 	out := &envoy_config_route_v3.Route{
-		Match: translateGlooMatcher(in.Match),
+		Match: translateMatcher(in.Match),
 	}
 	name := in.Name
 	if name != "" {
@@ -535,7 +553,7 @@ func (h *httpRouteConfigurationTranslator) initRoutes(
 	return out
 }
 
-func translateGlooMatcher(matcher gwv1.HTTPRouteMatch) *envoy_config_route_v3.RouteMatch {
+func translateMatcher(matcher gwv1.HTTPRouteMatch) *envoy_config_route_v3.RouteMatch {
 	match := &envoy_config_route_v3.RouteMatch{
 		Headers:         envoyHeaderMatcher(matcher.Headers),
 		QueryParameters: envoyQueryMatcher(matcher.QueryParams),

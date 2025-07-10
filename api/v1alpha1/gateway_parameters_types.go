@@ -3,6 +3,7 @@ package v1alpha1
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // +kubebuilder:rbac:groups=gateway.kgateway.dev,resources=gatewayparameters,verbs=get;list;watch
@@ -35,7 +36,7 @@ type GatewayParametersList struct {
 // A GatewayParametersSpec describes the type of environment/platform in which
 // the proxy will be provisioned.
 //
-// +kubebuilder:validation:XValidation:message="exactly one of 'kube' or 'selfManaged' must be set",rule="has(self.kube) ? !has(self.selfManaged) : has(self.selfManaged)"
+// +kubebuilder:validation:ExactlyOneOf=kube;selfManaged
 type GatewayParametersSpec struct {
 	// The proxy will be deployed on Kubernetes.
 	//
@@ -64,13 +65,11 @@ func (in *GatewayParametersSpec) GetSelfManaged() *SelfManagedGateway {
 }
 
 // The current conditions of the GatewayParameters. This is not currently implemented.
-type GatewayParametersStatus struct {
-}
+type GatewayParametersStatus struct{}
 
-type SelfManagedGateway struct {
-}
+type SelfManagedGateway struct{}
 
-// Configuration for the set of Kubernetes resources that will be provisioned
+// KubernetesProxyConfig configures the set of Kubernetes resources that will be provisioned
 // for a given Gateway.
 type KubernetesProxyConfig struct {
 	// Use a Kubernetes deployment as the proxy workload type. Currently, this is the only
@@ -80,6 +79,7 @@ type KubernetesProxyConfig struct {
 	Deployment *ProxyDeployment `json:"deployment,omitempty"`
 
 	// Configuration for the container running Envoy.
+	// If AgentGateway is enabled, the EnvoyContainer values will be ignored.
 	//
 	// +optional
 	EnvoyContainer *EnvoyContainer `json:"envoyContainer,omitempty"`
@@ -120,7 +120,8 @@ type KubernetesProxyConfig struct {
 	// +optional
 	AiExtension *AiExtension `json:"aiExtension,omitempty"`
 
-	// Configure the AgentGateway integration
+	// Configure the AgentGateway integration. If AgentGateway is disabled, the EnvoyContainer values will be used by
+	// default to configure the data plane proxy.
 	//
 	// +optional
 	AgentGateway *AgentGateway `json:"agentGateway,omitempty"`
@@ -206,7 +207,7 @@ func (in *KubernetesProxyConfig) GetFloatingUserId() *bool {
 	return in.FloatingUserId
 }
 
-// Configuration for the Proxy deployment in Kubernetes.
+// ProxyDeployment configures the Proxy deployment in Kubernetes.
 type ProxyDeployment struct {
 	// The number of desired pods. Defaults to 1.
 	//
@@ -221,9 +222,8 @@ func (in *ProxyDeployment) GetReplicas() *uint32 {
 	return in.Replicas
 }
 
-// Configuration for the container running Envoy.
+// EnvoyContainer configures the container running Envoy.
 type EnvoyContainer struct {
-
 	// Initial envoy configuration.
 	//
 	// +optional
@@ -236,8 +236,8 @@ type EnvoyContainer struct {
 	// Default values, which may be overridden individually:
 	//
 	//	registry: quay.io/solo-io
-	//	repository: gloo-envoy-wrapper (OSS) / gloo-ee-envoy-wrapper (EE)
-	//	tag: <gloo version> (OSS) / <gloo-ee version> (EE)
+	//	repository: envoy-wrapper
+	//	tag: <kgateway version>
 	//	pullPolicy: IfNotPresent
 	//
 	// +optional
@@ -256,6 +256,13 @@ type EnvoyContainer struct {
 	//
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// do not use slice of pointers: https://github.com/kubernetes/code-generator/issues/166
+
+	// The container environment variables.
+	//
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 func (in *EnvoyContainer) GetBootstrap() *EnvoyBootstrap {
@@ -286,7 +293,14 @@ func (in *EnvoyContainer) GetResources() *corev1.ResourceRequirements {
 	return in.Resources
 }
 
-// Configuration for the Envoy proxy instance that is provisioned from a
+func (in *EnvoyContainer) GetEnv() []corev1.EnvVar {
+	if in == nil {
+		return nil
+	}
+	return in.Env
+}
+
+// EnvoyBootstrap configures the Envoy proxy instance that is provisioned from a
 // Kubernetes Gateway.
 type EnvoyBootstrap struct {
 	// Envoy log level. Options include "trace", "debug", "info", "warn", "error",
@@ -332,7 +346,7 @@ func (in *EnvoyBootstrap) GetComponentLogLevels() map[string]string {
 	return in.ComponentLogLevels
 }
 
-// Configuration for the container running Gloo SDS.
+// SdsContainer configures the container running SDS sidecar.
 type SdsContainer struct {
 	// The SDS container image. See
 	// https://kubernetes.io/docs/concepts/containers/images
@@ -389,7 +403,7 @@ func (in *SdsContainer) GetBootstrap() *SdsBootstrap {
 	return in.Bootstrap
 }
 
-// Configuration for the SDS instance that is provisioned from a Kubernetes Gateway.
+// SdsBootstrap configures the SDS instance that is provisioned from a Kubernetes Gateway.
 type SdsBootstrap struct {
 	// Log level for SDS. Options include "info", "debug", "warn", "error", "panic" and "fatal".
 	// Default level is "info".
@@ -405,7 +419,7 @@ func (in *SdsBootstrap) GetLogLevel() *string {
 	return in.LogLevel
 }
 
-// Configuration for the Istio integration settings used by a Gloo Gateway's data plane (Envoy proxy instance)
+// IstioIntegration configures the Istio integration settings used by a kgateway's data plane (Envoy proxy instance)
 type IstioIntegration struct {
 	// Configuration for the container running istio-proxy.
 	// Note that if Istio integration is not enabled, the istio container will not be injected
@@ -435,7 +449,7 @@ func (in *IstioIntegration) GetCustomSidecars() []corev1.Container {
 	return in.CustomSidecars
 }
 
-// Configuration for the container running the istio-proxy.
+// IstioContainer configures the container running the istio-proxy.
 type IstioContainer struct {
 	// The envoy container image. See
 	// https://kubernetes.io/docs/concepts/containers/images
@@ -636,6 +650,11 @@ type AiExtension struct {
 	//       metadataKey: "principal:iss"
 	// ```
 	Stats *AiExtensionStats `json:"stats,omitempty"`
+
+	// Additional OTel tracing config for AI Extension.
+	//
+	// +optional
+	Tracing *AiExtensionTrace `json:"tracing,omitempty"`
 }
 
 func (in *AiExtension) GetEnabled() *bool {
@@ -685,6 +704,13 @@ func (in *AiExtension) GetStats() *AiExtensionStats {
 		return nil
 	}
 	return in.Stats
+}
+
+func (in *AiExtension) GetTracing() *AiExtensionTrace {
+	if in == nil {
+		return nil
+	}
+	return in.Tracing
 }
 
 type AiExtensionStats struct {
@@ -758,7 +784,214 @@ func (in *CustomLabel) GetKeyDelimiter() *string {
 	return in.KeyDelimiter
 }
 
-// Configuration of the AgentGateway integration
+// AiExtensionTrace defines the tracing configuration for the AI extension
+type AiExtensionTrace struct {
+	// EndPoint specifies the URL of the OTLP Exporter for traces.
+	// Example: "http://my-otel-collector.svc.cluster.local:4317"
+	// https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/#otel_exporter_otlp_traces_endpoint
+	//
+	// +required
+	EndPoint gwv1.AbsoluteURI `json:"endpoint"`
+
+	// Sampler defines the sampling strategy for OpenTelemetry traces.
+	// Sampling helps in reducing the volume of trace data by selectively
+	// recording only a subset of traces.
+	// https://opentelemetry.io/docs/languages/sdk-configuration/general/#otel_traces_sampler
+	//
+	// +optional
+	Sampler *OTelTracesSampler `json:"sampler,omitempty"`
+
+	// OTLPTimeout specifies timeout configurations for OTLP (OpenTelemetry Protocol) exports.
+	// It allows setting general and trace-specific timeouts for sending data.
+	// https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/#otel_exporter_otlp_traces_timeout
+	//
+	// +optional
+	Timeout *gwv1.Duration `json:"timeout,omitempty"`
+
+	// OTLPProtocol specifies the protocol to be used for OTLP exports.
+	// This determines how tracing data is serialized and transported (e.g., gRPC, HTTP/Protobuf).
+	// https://opentelemetry.io/docs/languages/sdk-configuration/otlp-exporter/#otel_exporter_otlp_traces_protocol
+	//
+	// +optional
+	// +kubebuilder:validation:Enum=grpc;http/protobuf;http/json
+	Protocol *OTLPTracesProtocolType `json:"protocol,omitempty"`
+
+	// TransportSecurity controls the TLS (Transport Layer Security) settings when connecting
+	// to the tracing server. It determines whether certificate verification should be skipped.
+	//
+	// +optional
+	// +kubebuilder:validation:Enum=secure;insecure
+	TransportSecurity *OTLPTransportSecurityMode `json:"transportSecurity,omitempty"`
+}
+
+func (in *AiExtensionTrace) GetTimeout() *gwv1.Duration {
+	if in == nil {
+		return nil
+	}
+	return in.Timeout
+}
+
+// OTelTracesSamplerType defines the available OpenTelemetry trace sampler types.
+// These samplers determine which traces are recorded and exported.
+type OTelTracesSamplerType string
+
+const (
+	// OTelTracesSamplerAlwaysOn enables always-on sampling.
+	// All traces will be recorded and exported. Useful for development or low-traffic systems.
+	OTelTracesSamplerAlwaysOn OTelTracesSamplerType = "alwaysOn"
+
+	// OTelTracesSamplerAlwaysOff enables always-off sampling.
+	// No traces will be recorded or exported. Effectively disables tracing.
+	OTelTracesSamplerAlwaysOff OTelTracesSamplerType = "alwaysOff"
+
+	// OTelTracesSamplerTraceidratio enables trace ID ratio based sampling.
+	// Traces are sampled based on a configured probability derived from their trace ID.
+	OTelTracesSamplerTraceidratio OTelTracesSamplerType = "traceidratio"
+
+	// OTelTracesSamplerParentbasedAlwaysOn enables parent-based always-on sampling.
+	// If a parent span exists and is sampled, the child span is also sampled.
+	OTelTracesSamplerParentbasedAlwaysOn OTelTracesSamplerType = "parentbasedAlwaysOn"
+
+	// OTelTracesSamplerParentbasedAlwaysOff enables parent-based always-off sampling.
+	// If a parent span exists and is not sampled, the child span is also not sampled.
+	OTelTracesSamplerParentbasedAlwaysOff OTelTracesSamplerType = "parentbasedAlwaysOff"
+
+	// OTelTracesSamplerParentbasedTraceidratio enables parent-based trace ID ratio sampling.
+	// If a parent span exists and is sampled, the child span is also sampled.
+	OTelTracesSamplerParentbasedTraceidratio OTelTracesSamplerType = "parentbasedTraceidratio"
+)
+
+func (otelSamplerType OTelTracesSamplerType) String() string {
+	switch otelSamplerType {
+	case OTelTracesSamplerAlwaysOn:
+		return "alwaysOn"
+	case OTelTracesSamplerAlwaysOff:
+		return "alwaysOff"
+	case OTelTracesSamplerTraceidratio:
+		return "traceidratio"
+	case OTelTracesSamplerParentbasedAlwaysOn:
+		return "parentbasedAlwaysOn"
+	case OTelTracesSamplerParentbasedAlwaysOff:
+		return "parentbasedAlwaysOff"
+	case OTelTracesSamplerParentbasedTraceidratio:
+		return "parentbasedTraceidratio"
+	default:
+		return ""
+	}
+}
+
+// OTelTracesSampler defines the configuration for an OpenTelemetry trace sampler.
+// It combines the sampler type with any required arguments for that type.
+type OTelTracesSampler struct {
+	// SamplerType specifies the type of sampler to use (default value: "parentbased_always_on").
+	// Refer to OTelTracesSamplerType for available options.
+	// https://opentelemetry.io/docs/languages/sdk-configuration/general/#otel_traces_sampler
+	//
+	//+optional
+	// +kubebuilder:validation:Enum=alwaysOn;alwaysOff;traceidratio;parentbasedAlwaysOn;parentbasedAlwaysOff;parentbasedTraceidratio
+	SamplerType *OTelTracesSamplerType `json:"type,omitempty"`
+	// SamplerArg provides an argument for the chosen sampler type.
+	// For "traceidratio" or "parentbased_traceidratio" samplers: Sampling probability, a number in the [0..1] range,
+	// e.g. 0.25. Default is 1.0 if unset.
+	// https://opentelemetry.io/docs/languages/sdk-configuration/general/#otel_traces_sampler_arg
+	//
+	//+optional
+	// +kubebuilder:validation:Pattern=`^0(\.\d+)?|1(\.0+)?$`
+	SamplerArg *string `json:"arg,omitempty"`
+}
+
+func (in *AiExtensionTrace) GetSampler() *OTelTracesSampler {
+	if in == nil {
+		return nil
+	}
+	return in.Sampler
+}
+
+func (in *AiExtensionTrace) GetSamplerType() *string {
+	if in == nil || in.Sampler == nil || in.Sampler.SamplerType == nil {
+		return nil
+	}
+	value := in.Sampler.SamplerType.String()
+	return &value
+}
+
+func (in *AiExtensionTrace) GetSamplerArg() *string {
+	if in == nil || in.Sampler == nil {
+		return nil
+	}
+	return in.GetSampler().SamplerArg
+}
+
+// OTLPTracesProtocolType defines the supported protocols for OTLP exporter.
+type OTLPTracesProtocolType string
+
+const (
+	// OTLPTracesProtocolTypeGrpc specifies OTLP over gRPC protocol.
+	// This is typically the most efficient protocol for OpenTelemetry data transfer.
+	OTLPTracesProtocolTypeGrpc OTLPTracesProtocolType = "grpc"
+	// OTLPTracesProtocolTypeProtobuf specifies OTLP over HTTP with Protobuf serialization.
+	// Data is sent via HTTP POST requests with Protobuf message bodies.
+	OTLPTracesProtocolTypeProtobuf OTLPTracesProtocolType = "http/protobuf"
+	// OTLPTracesProtocolTypeJson specifies OTLP over HTTP with JSON serialization.
+	// Data is sent via HTTP POST requests with JSON message bodies.
+	OTLPTracesProtocolTypeJson OTLPTracesProtocolType = "http/json"
+)
+
+func (in *AiExtensionTrace) GetOTLPProtocolType() *string {
+	if in == nil || in.Protocol == nil {
+		return nil
+	}
+	value := in.Protocol.String()
+	return &value
+}
+
+func (otelProtocolType OTLPTracesProtocolType) String() string {
+	switch otelProtocolType {
+	case OTLPTracesProtocolTypeGrpc:
+		return "grpc"
+	case OTLPTracesProtocolTypeProtobuf:
+		return "http/protobuf"
+	case OTLPTracesProtocolTypeJson:
+		return "http/json"
+	default:
+		return ""
+	}
+}
+
+// OTLPTransportSecurityMode defines the transport security options for OTLP connections.
+type OTLPTransportSecurityMode string
+
+const (
+	// OTLPTransportSecuritySecure enables TLS (client transport security) for OTLP connections.
+	// This means the client will verify the server's certificate.
+	OTLPTransportSecuritySecure OTLPTransportSecurityMode = "secure"
+
+	// OTLPTransportSecurityInsecure disables TLS for OTLP connections,
+	// meaning certificate verification is skipped. This is generally not recommended
+	// for production environments due to security risks.
+	OTLPTransportSecurityInsecure OTLPTransportSecurityMode = "insecure"
+)
+
+func (otelTransportSecurityMode OTLPTransportSecurityMode) String() string {
+	switch otelTransportSecurityMode {
+	case OTLPTransportSecuritySecure:
+		return "secure"
+	case OTLPTransportSecurityInsecure:
+		return "insecure"
+	default:
+		return ""
+	}
+}
+
+func (in *AiExtensionTrace) GetTransportSecurityMode() *string {
+	if in == nil || in.TransportSecurity == nil {
+		return nil
+	}
+	value := in.TransportSecurity.String()
+	return &value
+}
+
+// AgentGateway configures the AgentGateway integration. If AgentGateway is enabled, Envoy
 type AgentGateway struct {
 	// Whether to enable the extension.
 	//
@@ -770,6 +1003,41 @@ type AgentGateway struct {
 	//
 	// +optional
 	LogLevel *string `json:"logLevel,omitempty"`
+
+	// The agentgateway container image. See
+	// https://kubernetes.io/docs/concepts/containers/images
+	// for details.
+	//
+	// Default values, which may be overridden individually:
+	//
+	//	registry: ghcr.io/agentgateway
+	//	repository: agentgateway
+	//	tag: <agentgateway version>
+	//	pullPolicy: IfNotPresent
+	//
+	// +optional
+	Image *Image `json:"image,omitempty"`
+
+	// The security context for this container. See
+	// https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.26/#securitycontext-v1-core
+	// for details.
+	//
+	// +optional
+	SecurityContext *corev1.SecurityContext `json:"securityContext,omitempty"`
+
+	// The compute resources required by this container. See
+	// https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+	// for details.
+	//
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// do not use slice of pointers: https://github.com/kubernetes/code-generator/issues/166
+
+	// The container environment variables.
+	//
+	// +optional
+	Env []corev1.EnvVar `json:"env,omitempty"`
 }
 
 func (in *AgentGateway) GetEnabled() *bool {
@@ -784,4 +1052,32 @@ func (in *AgentGateway) GetLogLevel() *string {
 		return nil
 	}
 	return in.LogLevel
+}
+
+func (in *AgentGateway) GetImage() *Image {
+	if in == nil {
+		return nil
+	}
+	return in.Image
+}
+
+func (in *AgentGateway) GetSecurityContext() *corev1.SecurityContext {
+	if in == nil {
+		return nil
+	}
+	return in.SecurityContext
+}
+
+func (in *AgentGateway) GetResources() *corev1.ResourceRequirements {
+	if in == nil {
+		return nil
+	}
+	return in.Resources
+}
+
+func (in *AgentGateway) GetEnv() []corev1.EnvVar {
+	if in == nil {
+		return nil
+	}
+	return in.Env
 }
