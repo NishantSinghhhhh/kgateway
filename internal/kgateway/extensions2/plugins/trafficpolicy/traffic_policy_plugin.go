@@ -344,7 +344,6 @@ func (p *trafficPolicyPluginGwPass) ApplyForRoute(ctx context.Context, pCtx *ir.
 		pCtx.TypedFilterConfig.AddTypedConfig(metadataRouteTransformation, setmetaTransform)
 
 		p.setTransformationInChain[pCtx.FilterChainName] = true
-
 	}
 
 	if policy.spec.AI != nil {
