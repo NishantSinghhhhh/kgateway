@@ -13,12 +13,7 @@ import (
 )
 
 var (
-	backendManifest       = filepath.Join(fsutils.MustGetThisDir(), "testdata", "backend.yaml")
-	httprouteManifest     = filepath.Join(fsutils.MustGetThisDir(), "testdata", "httproute.yaml")
-	trafficPolicyManifest = filepath.Join(fsutils.MustGetThisDir(), "testdata", "trafficpolicy.yaml")
-
-	invalidTrafficPolicyManifest = filepath.Join(
-		fsutils.MustGetThisDir(), "testdata", "invalid_trafficpolicy.yaml")
+	autoHostRewriteManifest = filepath.Join(fsutils.MustGetThisDir(), "testdata", "auto_host_rewrite.yaml")
 
 	/* objects from gateway manifest (gw.yaml) */
 	proxyObjectMeta = metav1.ObjectMeta{
@@ -28,24 +23,10 @@ var (
 	proxyDeployment = &appsv1.Deployment{ObjectMeta: proxyObjectMeta}
 	proxyService    = &corev1.Service{ObjectMeta: proxyObjectMeta}
 
-	/* backend service + deployment */
-	echoDeployment = &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "echo",
-			Namespace: "default",
-		},
-	}
-	echoService = &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "echo",
-			Namespace: "default",
-		},
-	}
-
 	/* route + traffic-policy */
 	route = &gwv1.HTTPRoute{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "echo-route",
+			Name:      "httpbin-route",
 			Namespace: "default",
 		},
 	}
