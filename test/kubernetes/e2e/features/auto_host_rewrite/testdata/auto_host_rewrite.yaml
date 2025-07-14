@@ -22,7 +22,26 @@ spec:
   hostnames:
     - "foo.local"
   rules:
-    - backendRefs:
+    - matches:
+      - path:
+          type: PathPrefix
+          value: /headers-override
+      filters:
+      - type: URLRewrite
+        urlRewrite:
+          hostname: "foo.override" # this will override the autoHostRewrite from TrafficPolicy
+          path:
+            type: ReplaceFullPath
+            replaceFullPath: /headers
+      backendRefs:
+        - name: httpbin-static
+          kind: Backend
+          group: gateway.kgateway.dev
+    - matches:
+      - path:
+          type: PathPrefix
+          value: /
+      backendRefs:
         - name: httpbin-static
           kind: Backend
           group: gateway.kgateway.dev

@@ -68,7 +68,8 @@ func (s *testingSuite) TearDownSuite() {
 
 /* ──────────────────────────── Test Cases ──────────────────────────── */
 
-func (s *testingSuite) TestHostHeaderIsRewritten() {
+func (s *testingSuite) TestHostHeader() {
+	// test basic route with autoHostRewrite
 	s.ti.Assertions.AssertEventuallyConsistentCurlResponse(
 		s.ctx,
 		defaults.CurlPodExecOpt,
@@ -80,9 +81,26 @@ func (s *testingSuite) TestHostHeaderIsRewritten() {
 		},
 		&testmatchers.HttpResponse{
 			StatusCode: http.StatusOK,
-			// /headers output should have `Host` header set with the DNS name of the service
-			// due to auto_host_rewrite=true
+			// `/headers` output should have `Host` header set with the DNS name of the service
+			// due to autoHostRewrite=true
 			Body: gomega.ContainSubstring("httpbin.default.svc"),
+		},
+	)
+
+	// test specific rule with URLRewrite.hostname set, which overrides the autoHostRewrite from TrafficPolicy
+	s.ti.Assertions.AssertEventuallyConsistentCurlResponse(
+		s.ctx,
+		defaults.CurlPodExecOpt,
+		[]curl.Option{
+			curl.WithPath("/headers-override"),
+			curl.WithHost(kubeutils.ServiceFQDN(proxyObjectMeta)),
+			curl.WithHostHeader("foo.local"),
+			curl.WithPort(8080),
+		},
+		&testmatchers.HttpResponse{
+			StatusCode: http.StatusOK,
+			// `/headers` output should have `Host` header set to the urlRwrite.hostname value
+			Body: gomega.ContainSubstring("foo.override"),
 		},
 	)
 }
