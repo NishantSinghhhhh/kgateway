@@ -6788,7 +6788,7 @@ func schema_kgateway_v2_api_v1alpha1_TrafficPolicySpec(ref common.ReferenceCallb
 					},
 					"autoHostRewrite": {
 						SchemaProps: spec.SchemaProps{
-							Description: "AutoHostRewrite rewrites the Host header to the DNS name of the selected upstream. Only honoured for HTTPRoute targets.",
+							Description: "AutoHostRewrite rewrites the Host header to the DNS name of the selected upstream. NOTE: This field is only honoured for HTTPRoute targets. NOTE: If `autoHostRewrite` is set on a route that also has a [URLRewrite filter](https://gateway-api.sigs.k8s.io/reference/spec/#httpurlrewritefilter) configured to override the `hostname`, the `hostname` value will be used and `autoHostRewrite` will be ignored.",
 							Type:        []string{"boolean"},
 							Format:      "",
 						},
