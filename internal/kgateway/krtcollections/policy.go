@@ -28,10 +28,12 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/translator/backendref"
 	tmetrics "github.com/kgateway-dev/kgateway/v2/internal/kgateway/translator/metrics"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/translator/utils"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	"github.com/kgateway-dev/kgateway/v2/pkg/metrics"
 	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
+
+	krtinternal "github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
+	krtpkg "github.com/kgateway-dev/kgateway/v2/pkg/utils/krtutil"
 )
 
 var (
@@ -67,7 +69,7 @@ type BackendIndex struct {
 
 	policies  *PolicyIndex
 	refgrants *RefGrantIndex
-	krtopts   krtutil.KrtOptions
+	krtopts   krtinternal.KrtOptions
 }
 
 type backendKey struct {
@@ -76,7 +78,7 @@ type backendKey struct {
 }
 
 func NewBackendIndex(
-	krtopts krtutil.KrtOptions,
+	krtopts krtinternal.KrtOptions,
 	policies *PolicyIndex,
 	refgrants *RefGrantIndex,
 ) *BackendIndex {
@@ -130,7 +132,7 @@ func (i *BackendIndex) AddBackends(gk schema.GroupKind, col krt.Collection[ir.Ba
 		return ptr.Of(&backendObj)
 	}, i.krtopts.ToOptions("")...)
 
-	idx := krtutil.UnnamedIndex(col, func(backendObj ir.BackendObjectIR) (aliasKeys []backendKey) {
+	idx := krtpkg.UnnamedIndex(col, func(backendObj ir.BackendObjectIR) (aliasKeys []backendKey) {
 		for _, alias := range backendObj.Aliases {
 			aliasKeys = append(aliasKeys, backendKey{ObjectSource: alias, port: backendObj.Port})
 		}
@@ -268,7 +270,7 @@ type GatewayIndex struct {
 }
 
 func NewGatewayIndex(
-	krtopts krtutil.KrtOptions,
+	krtopts krtinternal.KrtOptions,
 	controllerName string,
 	policies *PolicyIndex,
 	gws krt.Collection[*gwv1.Gateway],
@@ -278,7 +280,7 @@ func NewGatewayIndex(
 ) *GatewayIndex {
 	h := &GatewayIndex{policies: policies}
 
-	byParentRefIndex := krtutil.UnnamedIndex(lss, func(in *gwxv1a1.XListenerSet) []targetRefIndexKey {
+	byParentRefIndex := krtpkg.UnnamedIndex(lss, func(in *gwxv1a1.XListenerSet) []targetRefIndexKey {
 		pRef := in.Spec.ParentRef
 		ns := strOr(pRef.Namespace, "")
 		if ns == "" {
@@ -519,7 +521,7 @@ func (h *PolicyIndex) HasSynced() bool {
 }
 
 func NewPolicyIndex(
-	krtopts krtutil.KrtOptions,
+	krtopts krtinternal.KrtOptions,
 	contributesPolicies extensionsplug.ContributesPolicies,
 	globalSettings settings.Settings,
 ) *PolicyIndex {
@@ -589,7 +591,7 @@ func NewPolicyIndex(
 				}
 			})
 
-			targetRefIndex := krtutil.UnnamedIndex(policiesByTargetRef, func(p ir.PolicyWrapper) []targetRefIndexKey {
+			targetRefIndex := krtpkg.UnnamedIndex(policiesByTargetRef, func(p ir.PolicyWrapper) []targetRefIndexKey {
 				// Every policy is indexed by PolicyRef and PolicyRef without Name (by Group+Kind+Namespace)
 				ret := make([]targetRefIndexKey, len(p.TargetRefs)*2)
 				for i, tr := range p.TargetRefs {
@@ -822,7 +824,7 @@ func (h *RefGrantIndex) HasSynced() bool {
 }
 
 func NewRefGrantIndex(refgrants krt.Collection[*gwv1beta1.ReferenceGrant]) *RefGrantIndex {
-	refGrantIndex := krtutil.UnnamedIndex(refgrants, func(p *gwv1beta1.ReferenceGrant) []refGrantIndexKey {
+	refGrantIndex := krtpkg.UnnamedIndex(refgrants, func(p *gwv1beta1.ReferenceGrant) []refGrantIndexKey {
 		ret := make([]refGrantIndexKey, 0, len(p.Spec.To)*len(p.Spec.From))
 		for _, from := range p.Spec.From {
 			for _, to := range p.Spec.To {
@@ -936,7 +938,7 @@ func (r *RoutesIndex) HTTPRoutes() krt.Collection[ir.HttpRouteIR] {
 }
 
 func NewRoutesIndex(
-	krtopts krtutil.KrtOptions,
+	krtopts krtinternal.KrtOptions,
 	httproutes krt.Collection[*gwv1.HTTPRoute],
 	grpcroutes krt.Collection[*gwv1.GRPCRoute],
 	tcproutes krt.Collection[*gwv1a2.TCPRoute],
@@ -974,7 +976,7 @@ func NewRoutesIndex(
 	}, krtopts.ToOptions("routes-grpc-routes-with-policy")...)
 	h.routes = krt.JoinCollection([]krt.Collection[RouteWrapper]{httpRouteCollection, grpcRoutesCollection, tcpRoutesCollection, tlsRoutesCollection}, krtopts.ToOptions("all-routes-with-policy")...)
 
-	httpBySelector := krtutil.UnnamedIndex(h.httpRoutes, func(i ir.HttpRouteIR) []HTTPRouteSelector {
+	httpBySelector := krtpkg.UnnamedIndex(h.httpRoutes, func(i ir.HttpRouteIR) []HTTPRouteSelector {
 		value, ok := i.SourceObject.GetLabels()[apilabels.DelegationLabelSelector]
 		if !ok {
 			return []HTTPRouteSelector{
@@ -993,7 +995,7 @@ func NewRoutesIndex(
 	})
 	h.httpBySelector = httpBySelector
 
-	byParentRef := krtutil.UnnamedIndex(h.routes, func(in RouteWrapper) []targetRefIndexKey {
+	byParentRef := krtpkg.UnnamedIndex(h.routes, func(in RouteWrapper) []targetRefIndexKey {
 		parentRefs := in.Route.GetParentRefs()
 		ret := make([]targetRefIndexKey, len(parentRefs))
 		for i, pRef := range parentRefs {
