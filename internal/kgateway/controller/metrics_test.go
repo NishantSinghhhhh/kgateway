@@ -2,11 +2,9 @@ package controller_test
 
 import (
 	"context"
-	"fmt"
+	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	api "sigs.k8s.io/gateway-api/apis/v1"
@@ -16,45 +14,32 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/pkg/metrics/metricstest"
 )
 
-type GinkgoTestReporter struct{}
-
-func (g GinkgoTestReporter) Errorf(format string, args ...interface{}) {
-	Fail(fmt.Sprintf(format, args...))
+type TestReporter struct {
+	t *testing.T
 }
 
-func (g GinkgoTestReporter) Fatalf(format string, args ...interface{}) {
-	Fail(fmt.Sprintf(format, args...))
+func (r TestReporter) Errorf(format string, args ...interface{}) {
+	r.t.Errorf(format, args...)
 }
 
-var _ = Describe("GwControllerMetrics", func() {
-	var (
-		ctx    context.Context
-		cancel context.CancelFunc
-	)
+func (r TestReporter) Fatalf(format string, args ...interface{}) {
+	r.t.Fatalf(format, args...)
+}
 
-	JustBeforeEach(func() {
-		ctx, cancel = context.WithCancel(context.Background())
+func (r TestReporter) FailNow() {
+	r.t.FailNow()
+}
 
-		var err error
-		cancel, err = createManager(ctx, inferenceExt, nil)
-		Expect(err).NotTo(HaveOccurred())
+// TestGwControllerMetrics tests the GwController metrics functionality
+func TestGwControllerMetrics(t *testing.T) {
+	t.Run("should generate gateway controller metrics", func(t *testing.T) {
+		ctx, cancel := setupGwControllerMetricsTest(t)
+		defer teardownGwControllerMetricsTest(t, cancel)
 
-		ResetMetrics()
+		setupGateway(t, ctx)
+		defer deleteGateway(t, ctx)
 
-	})
-
-	AfterEach(func() {
-		cancel()
-
-		// ensure goroutines cleanup
-		Eventually(func() bool { return true }).WithTimeout(3 * time.Second).Should(BeTrue())
-	})
-
-	It("should generate gateway controller metrics", func() {
-		setupGateway(ctx)
-		defer deleteGateway(ctx)
-
-		gathered := metricstest.MustGatherMetrics(GinkgoT())
+		gathered := metricstest.MustGatherMetrics(TestReporter{t})
 
 		gathered.AssertMetrics("kgateway_controller_reconciliations_total", []metricstest.ExpectMetric{
 			&metricstest.ExpectedMetricValueTest{
@@ -95,34 +80,75 @@ var _ = Describe("GwControllerMetrics", func() {
 		}})
 	})
 
-	Context("when metrics are not active", func() {
-		var oldRegistry metrics.RegistererGatherer
-
-		BeforeEach(func() {
-			metrics.SetActive(false)
-			oldRegistry = metrics.Registry()
-			metrics.SetRegistry(false, metrics.NewRegistry())
-		})
-
-		AfterEach(func() {
-			metrics.SetActive(true)
-			metrics.SetRegistry(false, oldRegistry)
-		})
-
-		It("should not record metrics if metrics are not active", func() {
-			setupGateway(ctx)
-			defer deleteGateway(ctx)
-
-			gathered := metricstest.MustGatherMetrics(GinkgoT())
-
-			gathered.AssertMetricNotExists("kgateway_controller_reconciliations_total")
-			gathered.AssertMetricNotExists("kgateway_controller_reconciliations_running")
-			gathered.AssertMetricNotExists("kgateway_controller_reconcile_duration_seconds")
-		})
-
+	t.Run("when metrics are not active", func(t *testing.T) {
+		testGwControllerMetricsInactive(t)
 	})
+}
 
-})
+func setupGwControllerMetricsTest(t *testing.T) (context.Context, context.CancelFunc) {
+	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	var err error
+	managerCancel, err := createManager(ctx, inferenceExt, nil)
+	if err != nil {
+		cancel()
+		t.Fatalf("Failed to create manager: %v", err)
+	}
+
+	ResetMetrics()
+
+	// Return a combined cancel function
+	combinedCancel := func() {
+		if managerCancel != nil {
+			managerCancel()
+		}
+		cancel()
+	}
+
+	return ctx, combinedCancel
+}
+
+func teardownGwControllerMetricsTest(t *testing.T, cancel context.CancelFunc) {
+	t.Helper()
+
+	if cancel != nil {
+		cancel()
+	}
+
+	// ensure goroutines cleanup
+	waitForCondition(t, func() bool { return true }, 3*time.Second, 100*time.Millisecond, "goroutines cleanup")
+}
+
+func testGwControllerMetricsInactive(t *testing.T) {
+	var oldRegistry metrics.RegistererGatherer
+
+	// Setup: disable metrics
+	metrics.SetActive(false)
+	oldRegistry = metrics.Registry()
+	metrics.SetRegistry(false, metrics.NewRegistry())
+
+	// Cleanup: restore metrics
+	defer func() {
+		metrics.SetActive(true)
+		metrics.SetRegistry(false, oldRegistry)
+	}()
+
+	ctx, cancel := setupGwControllerMetricsTest(t)
+	defer teardownGwControllerMetricsTest(t, cancel)
+
+	t.Run("should not record metrics if metrics are not active", func(t *testing.T) {
+		setupGateway(t, ctx)
+		defer deleteGateway(t, ctx)
+
+		gathered := metricstest.MustGatherMetrics(TestReporter{t})
+
+		gathered.AssertMetricNotExists("kgateway_controller_reconciliations_total")
+		gathered.AssertMetricNotExists("kgateway_controller_reconciliations_running")
+		gathered.AssertMetricNotExists("kgateway_controller_reconcile_duration_seconds")
+	})
+}
 
 func gateway() *api.Gateway {
 	same := api.NamespacesFromSame
@@ -150,14 +176,18 @@ func gateway() *api.Gateway {
 	return &gw
 }
 
-func deleteGateway(ctx context.Context) {
+func deleteGateway(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	gw := gateway()
 	err := k8sClient.Delete(ctx, gw)
-	Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Failed to delete gateway: %v", err)
+	}
 
 	// The tests in this suite don't do a good job of cleaning up after themselves, which is relevant because of the shared envtest environment
 	// but we can at least that the gateway from this test is deleted
-	Eventually(func() bool {
+	waitForCondition(t, func() bool {
 		var createdGateways api.GatewayList
 		err := k8sClient.List(ctx, &createdGateways)
 		found := false
@@ -168,38 +198,48 @@ func deleteGateway(ctx context.Context) {
 			}
 		}
 		return err == nil && !found
-	}, timeout, interval).Should(BeTrue(), "gateway not deleted")
+	}, timeout, interval, "gateway not deleted")
 }
 
-func setupGateway(ctx context.Context) {
+func setupGateway(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	gw := gateway()
 	err := k8sClient.Create(ctx, gw)
-	Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		t.Fatalf("Failed to create gateway: %v", err)
+	}
 
-	waitForGatewayService(ctx, gw)
+	waitForGatewayService(t, ctx, gw)
 
 	if probs, err := metricstest.GatherAndLint(); err != nil || len(probs) > 0 {
-		Fail("metrics linter error: " + err.Error())
+		t.Fatalf("metrics linter error: %v", err)
 	}
 }
 
-func waitForGatewayService(ctx context.Context, gw *api.Gateway) corev1.Service {
+func waitForGatewayService(t *testing.T, ctx context.Context, gw *api.Gateway) corev1.Service {
+	t.Helper()
+
 	var svc corev1.Service
 
-	Eventually(func() bool {
+	waitForCondition(t, func() bool {
 		var createdServices corev1.ServiceList
 		err := k8sClient.List(ctx, &createdServices)
 		if err != nil {
 			return false
 		}
-		for _, svc = range createdServices.Items {
-			if len(svc.ObjectMeta.OwnerReferences) == 1 && svc.ObjectMeta.OwnerReferences[0].UID == gw.GetUID() {
+		for _, s := range createdServices.Items {
+			if len(s.ObjectMeta.OwnerReferences) == 1 && s.ObjectMeta.OwnerReferences[0].UID == gw.GetUID() {
+				svc = s
 				return true
 			}
 		}
 		return false
-	}, timeout, interval).Should(BeTrue(), "service not created")
-	Expect(svc.Spec.ClusterIP).NotTo(BeEmpty())
+	}, timeout, interval, "service not created")
+
+	if svc.Spec.ClusterIP == "" {
+		t.Fatalf("Expected service ClusterIP to not be empty")
+	}
 
 	return svc
 }

@@ -9,9 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"istio.io/istio/pkg/kube"
 	istiosets "istio.io/istio/pkg/util/sets"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	infextv1a2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	apiv1 "sigs.k8s.io/gateway-api/apis/v1"
+	"istio.io/istio/pkg/kube"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/controller"
@@ -66,31 +64,40 @@ var (
 	inferenceExt *deployer.InferenceExtInfo
 )
 
-func getAssetsDir() string {
-	var assets string
-	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
-		// set default if not user provided
-		out, err := exec.Command("sh", "-c", "make -sC $(dirname $(go env GOMOD)) envtest-path").CombinedOutput()
-		fmt.Fprintln(GinkgoWriter, "out:", string(out))
-		ExpectWithOffset(1, err).NotTo(HaveOccurred())
-		assets = strings.TrimSpace(string(out))
-	}
-	return assets
-}
-
-var _ = BeforeSuite(func() {
-	log.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true)))
+func TestMain(m *testing.M) {
+	// Setup logger for tests
+	log.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseDevMode(true)))
 
 	ctx, cancel = context.WithCancel(context.Background())
 
-	By("bootstrapping test environment")
+	// Setup test environment
+	if err := setupTestEnvironment(); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to setup test environment: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Run tests
+	code := m.Run()
+
+	// Cleanup
+	teardownTestEnvironment()
+
+	os.Exit(code)
+}
+
+func setupTestEnvironment() error {
+	fmt.Println("Bootstrapping test environment")
+	
 	// Create a scheme and add both Gateway and InferencePool types.
 	scheme = schemes.GatewayScheme()
-	err := infextv1a2.Install(scheme)
-	Expect(err).NotTo(HaveOccurred())
+	if err := infextv1a2.Install(scheme); err != nil {
+		return fmt.Errorf("failed to install inference extension scheme: %w", err)
+	}
+	
 	// Required to deploy endpoint picker RBAC resources.
-	err = rbacv1.AddToScheme(scheme)
-	Expect(err).NotTo(HaveOccurred())
+	if err := rbacv1.AddToScheme(scheme); err != nil {
+		return fmt.Errorf("failed to add rbac to scheme: %w", err)
+	}
 
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
@@ -102,28 +109,57 @@ var _ = BeforeSuite(func() {
 		BinaryAssetsDirectory: getAssetsDir(),
 	}
 
+	var err error
 	cfg, err = testEnv.Start()
-	Expect(err).NotTo(HaveOccurred())
-	Expect(cfg).NotTo(BeNil())
+	if err != nil {
+		return fmt.Errorf("failed to start test environment: %w", err)
+	}
+
+	if cfg == nil {
+		return fmt.Errorf("test environment config is nil")
+	}
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sClient).NotTo(BeNil())
-})
+	if err != nil {
+		return fmt.Errorf("failed to create k8s client: %w", err)
+	}
 
-var _ = AfterSuite(func() {
-	cancel()
-	By("tearing down the test environment")
-	err := testEnv.Stop()
-	Expect(err).NotTo(HaveOccurred())
+	if k8sClient == nil {
+		return fmt.Errorf("k8s client is nil")
+	}
+
+	return nil
+}
+
+func teardownTestEnvironment() {
+	if cancel != nil {
+		cancel()
+	}
+	
+	fmt.Println("Tearing down the test environment")
+	if testEnv != nil {
+		if err := testEnv.Stop(); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to stop test environment: %v\n", err)
+		}
+	}
+	
 	if kubeconfig != "" {
 		os.Remove(kubeconfig)
 	}
-})
+}
 
-func TestController(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Controller Suite")
+func getAssetsDir() string {
+	var assets string
+	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
+		// set default if not user provided
+		out, err := exec.Command("sh", "-c", "make -sC $(dirname $(go env GOMOD)) envtest-path").CombinedOutput()
+		fmt.Printf("envtest assets output: %s\n", string(out))
+		if err != nil {
+			panic(fmt.Sprintf("failed to get envtest assets: %v", err))
+		}
+		assets = strings.TrimSpace(string(out))
+	}
+	return assets
 }
 
 func generateKubeConfiguration(restconfig *rest.Config) string {
@@ -154,12 +190,18 @@ func generateKubeConfiguration(restconfig *rest.Config) string {
 		CurrentContext: "cluster",
 		AuthInfos:      authinfos,
 	}
+	
 	// create temp file
 	tmpfile, err := os.CreateTemp("", "ggii_envtest_*.kubeconfig")
-	Expect(err).NotTo(HaveOccurred())
+	if err != nil {
+		panic(fmt.Sprintf("failed to create temp kubeconfig file: %v", err))
+	}
 	tmpfile.Close()
-	err = clientcmd.WriteToFile(clientConfig, tmpfile.Name())
-	Expect(err).NotTo(HaveOccurred())
+	
+	if err := clientcmd.WriteToFile(clientConfig, tmpfile.Name()); err != nil {
+		panic(fmt.Sprintf("failed to write kubeconfig file: %v", err))
+	}
+	
 	return tmpfile.Name()
 }
 
@@ -266,10 +308,12 @@ func createManager(
 	}
 
 	go func() {
-		defer GinkgoRecover()
+		// Note: No GinkgoRecover() since we're not using Ginkgo anymore
 		kubeconfig = generateKubeConfiguration(cfg)
 		mgr.GetLogger().Info("starting manager", "kubeconfig", kubeconfig)
-		Expect(mgr.Start(ctx)).ToNot(HaveOccurred())
+		if err := mgr.Start(ctx); err != nil {
+			panic(fmt.Sprintf("failed to start manager: %v", err))
+		}
 	}()
 
 	return func() {
@@ -282,16 +326,17 @@ func newCommonCols(ctx context.Context, kubeClient kube.Client) *collections.Com
 	krtopts := krtutil.NewKrtOptions(ctx.Done(), nil)
 	cli, err := versioned.NewForConfig(cfg)
 	if err != nil {
-		Expect(err).ToNot(HaveOccurred())
+		panic(fmt.Sprintf("failed to create versioned client: %v", err))
 	}
 
 	settings, err := settings.BuildSettings()
 	if err != nil {
-		Expect(err).ToNot(HaveOccurred())
+		panic(fmt.Sprintf("failed to build settings: %v", err))
 	}
+	
 	commoncol, err := collections.NewCommonCollections(ctx, krtopts, kubeClient, cli, nil, gatewayControllerName, *settings)
 	if err != nil {
-		Expect(err).ToNot(HaveOccurred())
+		panic(fmt.Sprintf("failed to create common collections: %v", err))
 	}
 
 	plugins := registry.Plugins(ctx, commoncol, wellknown.DefaultWaypointClassName)
@@ -301,4 +346,26 @@ func newCommonCols(ctx context.Context, kubeClient kube.Client) *collections.Com
 	commoncol.InitPlugins(ctx, extensions, *settings)
 	kubeClient.RunAndWait(ctx.Done())
 	return commoncol
+}
+
+// Helper functions for tests to use instead of Ginkgo's Expect
+func assertNoError(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+}
+
+func assertNotNil(t *testing.T, obj interface{}) {
+	t.Helper()
+	if obj == nil {
+		t.Fatal("Expected object not to be nil")
+	}
+}
+
+func assertEqual(t *testing.T, expected, actual interface{}) {
+	t.Helper()
+	if expected != actual {
+		t.Fatalf("Expected %v, got %v", expected, actual)
+	}
 }
