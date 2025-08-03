@@ -101,7 +101,7 @@ func TestInferencePoolController(t *testing.T) {
 					},
 				},
 			}
-			
+
 			err = wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
 				updateErr := k8sClient.Status().Update(ctx, httpRoute)
 				return updateErr == nil, nil
@@ -142,7 +142,7 @@ func TestInferencePoolController(t *testing.T) {
 			// We expect the deployer to render and deploy an endpoint picker Deployment with name "pool1-endpoint-picker".
 			expectedName := fmt.Sprintf("%s-endpoint-picker", pool.Name)
 			var deploy appsv1.Deployment
-			
+
 			err = wait.PollImmediate(1*time.Second, 10*time.Second, func() (bool, error) {
 				getErr := k8sClient.Get(ctx, client.ObjectKey{Namespace: defaultNamespace, Name: expectedName}, &deploy)
 				return getErr == nil, nil
