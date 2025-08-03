@@ -260,7 +260,7 @@ func TestGatewayClassProvisioner(t *testing.T) {
 // assertEventually polls a condition function until it returns true or times out
 func assertEventually(t *testing.T, condition func() bool, timeout, interval time.Duration, msgAndArgs ...interface{}) {
 	t.Helper()
-	
+
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if condition() {
@@ -268,7 +268,7 @@ func assertEventually(t *testing.T, condition func() bool, timeout, interval tim
 		}
 		time.Sleep(interval)
 	}
-	
+
 	// Build error message
 	msg := "condition was not met within timeout"
 	if len(msgAndArgs) > 0 {
@@ -276,6 +276,6 @@ func assertEventually(t *testing.T, condition func() bool, timeout, interval tim
 			msg = str
 		}
 	}
-	
+
 	t.Fatalf("assertEventually failed: %s (timeout: %v)", msg, timeout)
 }

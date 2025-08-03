@@ -168,7 +168,7 @@ func waitForGatewayServiceSimple(t *testing.T, ctx context.Context, gw *api.Gate
 // Helper function to wait with timeout and interval checking
 func waitForCondition(t *testing.T, condition func() bool, timeout, interval time.Duration, msg string) {
 	t.Helper()
-	
+
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if condition() {
@@ -182,7 +182,7 @@ func waitForCondition(t *testing.T, condition func() bool, timeout, interval tim
 // Helper function to wait for condition with error
 func waitForConditionWithError(t *testing.T, condition func() error, timeout, interval time.Duration, msg string) {
 	t.Helper()
-	
+
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 	for time.Now().Before(deadline) {

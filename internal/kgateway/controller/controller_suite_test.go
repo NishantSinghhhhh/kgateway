@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"istio.io/istio/pkg/kube"
 	istiosets "istio.io/istio/pkg/util/sets"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -28,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	infextv1a2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 	apiv1 "sigs.k8s.io/gateway-api/apis/v1"
-	"istio.io/istio/pkg/kube"
 
 	"github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/controller"
@@ -87,13 +87,13 @@ func TestMain(m *testing.M) {
 
 func setupTestEnvironment() error {
 	fmt.Println("Bootstrapping test environment")
-	
+
 	// Create a scheme and add both Gateway and InferencePool types.
 	scheme = schemes.GatewayScheme()
 	if err := infextv1a2.Install(scheme); err != nil {
 		return fmt.Errorf("failed to install inference extension scheme: %w", err)
 	}
-	
+
 	// Required to deploy endpoint picker RBAC resources.
 	if err := rbacv1.AddToScheme(scheme); err != nil {
 		return fmt.Errorf("failed to add rbac to scheme: %w", err)
@@ -135,14 +135,14 @@ func teardownTestEnvironment() {
 	if cancel != nil {
 		cancel()
 	}
-	
+
 	fmt.Println("Tearing down the test environment")
 	if testEnv != nil {
 		if err := testEnv.Stop(); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to stop test environment: %v\n", err)
 		}
 	}
-	
+
 	if kubeconfig != "" {
 		os.Remove(kubeconfig)
 	}
@@ -190,18 +190,18 @@ func generateKubeConfiguration(restconfig *rest.Config) string {
 		CurrentContext: "cluster",
 		AuthInfos:      authinfos,
 	}
-	
+
 	// create temp file
 	tmpfile, err := os.CreateTemp("", "ggii_envtest_*.kubeconfig")
 	if err != nil {
 		panic(fmt.Sprintf("failed to create temp kubeconfig file: %v", err))
 	}
 	tmpfile.Close()
-	
+
 	if err := clientcmd.WriteToFile(clientConfig, tmpfile.Name()); err != nil {
 		panic(fmt.Sprintf("failed to write kubeconfig file: %v", err))
 	}
-	
+
 	return tmpfile.Name()
 }
 
@@ -333,7 +333,7 @@ func newCommonCols(ctx context.Context, kubeClient kube.Client) *collections.Com
 	if err != nil {
 		panic(fmt.Sprintf("failed to build settings: %v", err))
 	}
-	
+
 	commoncol, err := collections.NewCommonCollections(ctx, krtopts, kubeClient, cli, nil, gatewayControllerName, *settings)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create common collections: %v", err))
@@ -353,19 +353,5 @@ func assertNoError(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatalf("Expected no error, got: %v", err)
-	}
-}
-
-func assertNotNil(t *testing.T, obj interface{}) {
-	t.Helper()
-	if obj == nil {
-		t.Fatal("Expected object not to be nil")
-	}
-}
-
-func assertEqual(t *testing.T, expected, actual interface{}) {
-	t.Helper()
-	if expected != actual {
-		t.Fatalf("Expected %v, got %v", expected, actual)
 	}
 }
