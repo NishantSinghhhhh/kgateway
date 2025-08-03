@@ -37,7 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
 
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
+	krtinternal "github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 )
 
 func (a *index) ServicesCollection(
@@ -45,7 +45,7 @@ func (a *index) ServicesCollection(
 	serviceEntries krt.Collection[*networkingclient.ServiceEntry],
 	inferencePools krt.Collection[*inf.InferencePool],
 	namespaces krt.Collection[*corev1.Namespace],
-	krtopts krtutil.KrtOptions,
+	krtopts krtinternal.KrtOptions,
 ) krt.Collection[ServiceInfo] {
 	servicesInfo := krt.NewCollection(services, a.serviceServiceBuilder(namespaces),
 		krtopts.ToOptions("ServicesInfo")...)
