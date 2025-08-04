@@ -29,7 +29,7 @@ func TestGatewayClassProvisioner(t *testing.T) {
 			time.Sleep(3 * time.Second)
 		}()
 
-		managerCancel, err := createManager(t,ctx, nil, nil)
+		managerCancel, err := createManager(t, ctx, nil, nil)
 		assertNoError(t, err)
 		defer managerCancel()
 
@@ -120,7 +120,7 @@ func TestGatewayClassProvisioner(t *testing.T) {
 			time.Sleep(3 * time.Second)
 		}()
 
-		managerCancel, err := createManager(t,ctx, nil, nil)
+		managerCancel, err := createManager(t, ctx, nil, nil)
 		assertNoError(t, err)
 		defer managerCancel()
 
@@ -164,7 +164,7 @@ func TestGatewayClassProvisioner(t *testing.T) {
 			time.Sleep(3 * time.Second)
 		}()
 
-		managerCancel, err := createManager(t,ctx, nil, nil)
+		managerCancel, err := createManager(t, ctx, nil, nil)
 		assertNoError(t, err)
 		defer managerCancel()
 

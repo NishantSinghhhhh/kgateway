@@ -22,7 +22,7 @@ func TestInferencePoolController(t *testing.T) {
 			// Setup
 			var err error
 			inferenceExt = new(deployer.InferenceExtInfo)
-			cancel, err = createManager(t,ctx, inferenceExt, nil)
+			cancel, err = createManager(t, ctx, inferenceExt, nil)
 			if err != nil {
 				t.Fatalf("Failed to create manager: %v", err)
 			}
@@ -156,7 +156,7 @@ func TestInferencePoolController(t *testing.T) {
 			// Setup
 			var err error
 			inferenceExt = new(deployer.InferenceExtInfo)
-			cancel, err = createManager(t,ctx, inferenceExt, nil)
+			cancel, err = createManager(t, ctx, inferenceExt, nil)
 			if err != nil {
 				t.Fatalf("Failed to create manager: %v", err)
 			}
@@ -215,7 +215,7 @@ func TestInferencePoolController(t *testing.T) {
 			// Setup
 			var err error
 			inferenceExt = nil
-			cancel, err = createManager(t,ctx, inferenceExt, nil)
+			cancel, err = createManager(t, ctx, inferenceExt, nil)
 			if err != nil {
 				t.Fatalf("Failed to create manager: %v", err)
 			}

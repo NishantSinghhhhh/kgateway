@@ -21,7 +21,7 @@ func TestGatewayClassStatusController(t *testing.T) {
 
 	// Setup
 	var err error
-	cancel, err = createManager(t,ctx, nil, nil)
+	cancel, err = createManager(t, ctx, nil, nil)
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
 	}
