@@ -91,7 +91,7 @@ func setupGwControllerMetricsTest(t *testing.T) (context.Context, context.Cancel
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var err error
-	managerCancel, err := createManager(ctx, inferenceExt, nil)
+	managerCancel, err := createManager(t, ctx, inferenceExt, nil)
 	if err != nil {
 		cancel()
 		t.Fatalf("Failed to create manager: %v", err)
