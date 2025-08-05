@@ -152,7 +152,14 @@ func getAssetsDir(t testing.TB) string {
 	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
 		out, err := exec.Command("sh", "-c", "make -sC $(dirname $(go env GOMOD)) envtest-path").CombinedOutput()
 		fmt.Printf("envtest assets output: %s\n", string(out))
-		assertNoError(t, err)
+		if err != nil {
+			// If t is nil (called from TestMain), just log the error and return empty string
+			if t == nil {
+				fmt.Printf("Error getting envtest assets: %v\n", err)
+				return ""
+			}
+			assertNoError(t, err)
+		}
 		assets = strings.TrimSpace(string(out))
 	}
 	return assets
