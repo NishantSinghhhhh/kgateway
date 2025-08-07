@@ -27,9 +27,10 @@ import (
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/translator/backendref"
 	tmetrics "github.com/kgateway-dev/kgateway/v2/internal/kgateway/translator/metrics"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/translator/utils"
+	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/delegation"
+	krtinternal "github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
 	pluginsdkir "github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/ir"
-	krtinternal "github.com/kgateway-dev/kgateway/v2/internal/kgateway/utils/krtutil"
 	krtpkg "github.com/kgateway-dev/kgateway/v2/pkg/utils/krtutil"
 )
 
@@ -544,7 +545,7 @@ func NewPolicyIndex(
 				return &a
 			}, krtopts.ToOptions(fmt.Sprintf("%s-policiesByTargetRef", gk.String()))...)
 
-			targetRefIndex := krtutil.UnnamedIndex(policiesByTargetRef, func(p ir.PolicyWrapper) []targetRefIndexKey {
+			targetRefIndex := krtpkg.UnnamedIndex(policiesByTargetRef, func(p ir.PolicyWrapper) []targetRefIndexKey {
 				// Every policy is indexed by PolicyRef and PolicyRef without Name (by Group+Kind+Namespace)
 				ret := make([]targetRefIndexKey, len(p.TargetRefs)*2)
 				for i, tr := range p.TargetRefs {
@@ -1126,7 +1127,8 @@ func (h *RoutesIndex) transformHttpRoute(kctx krt.HandlerContext, i *gwv1.HTTPRo
 			h.policies.getTargetingPolicies(kctx, extensionsplug.RouteAttachmentPoint, src, "", i.GetLabels()),
 			ir.WithInheritedPolicyPriority(inheritedPolicyPriority),
 		),
-		PrecedenceWeight: precedenceWeight,
+		PrecedenceWeight:               precedenceWeight,
+		DelegationInheritParentMatcher: delegation.ShouldInheritParentMatcher(i.GetAnnotations()),
 	}
 }
 
