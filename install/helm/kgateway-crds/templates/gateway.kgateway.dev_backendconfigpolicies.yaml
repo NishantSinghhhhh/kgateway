@@ -114,6 +114,8 @@ spec:
                     type: boolean
                   overrideStreamErrorOnInvalidHttpMessage:
                     type: boolean
+                  preserveHttp1HeaderCase:
+                    type: boolean
                 type: object
               http2ProtocolOptions:
                 properties:
@@ -321,8 +323,6 @@ spec:
                     type: array
                   insecureSkipVerify:
                     type: boolean
-                  oneWayTLS:
-                    type: boolean
                   parameters:
                     properties:
                       cipherSuites:
@@ -357,6 +357,8 @@ spec:
                         type: string
                     type: object
                     x-kubernetes-map-type: atomic
+                  simpleTLS:
+                    type: boolean
                   sni:
                     minLength: 1
                     type: string
