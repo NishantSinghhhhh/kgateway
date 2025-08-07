@@ -204,7 +204,7 @@ func GatewayCollection(
 		var servers []*istio.Server
 
 		// Extract the addresses. A gwv1 will bind to a specific Service
-		gatewayServices, err := extractGatewayServices(domainSuffix, obj)
+		gatewayServices, err := extractGatewayServices(obj)
 		if len(gatewayServices) == 0 && err != nil {
 			// Short circuit if it's a hard failure
 			logger.Error("failed to translate gwv1", "name", obj.GetName(), "namespace", obj.GetNamespace(), "err", err.Message)
@@ -247,7 +247,6 @@ func GatewayCollection(
 					Name:              InternalGatewayName(obj.Name, string(l.Name)),
 					Annotations:       meta,
 					Namespace:         obj.Namespace,
-					Domain:            domainSuffix,
 				},
 				// TODO: clean up and move away from istio gwv1 ir
 				Spec: &istio.Gateway{
