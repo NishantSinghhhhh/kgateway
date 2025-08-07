@@ -43,7 +43,7 @@ func TestGwControllerMetrics(t *testing.T) {
 			"kgateway_controller_reconciliations_total",
 			"kgateway_controller_reconciliations_running",
 			"kgateway_controller_reconcile_duration_seconds")
-			
+
 		gathered.AssertMetricsInclude("kgateway_controller_reconciliations_total", []metricstest.ExpectMetric{
 			&metricstest.ExpectedMetricValueTest{
 				Labels: []metrics.Label{
