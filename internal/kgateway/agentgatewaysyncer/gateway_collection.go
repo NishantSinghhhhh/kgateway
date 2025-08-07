@@ -180,7 +180,6 @@ func GatewayCollection(
 	namespaces krt.Collection[*corev1.Namespace],
 	grants ReferenceGrants,
 	secrets krt.Collection[*corev1.Secret],
-	domainSuffix string,
 	krtopts krtinternal.KrtOptions,
 ) krt.Collection[GatewayListener] {
 	gw := krt.NewManyCollection(gateways, func(ctx krt.HandlerContext, obj *gwv1.Gateway) []GatewayListener {
