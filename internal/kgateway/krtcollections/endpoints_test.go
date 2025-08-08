@@ -395,6 +395,7 @@ func TestEndpoints(t *testing.T) {
 						Labels: map[string]string{
 							corev1.LabelTopologyRegion: "region",
 							corev1.LabelTopologyZone:   "zone",
+							corev1.LabelHostname:       "node",
 						},
 					},
 				}
@@ -549,6 +550,7 @@ func TestEndpoints(t *testing.T) {
 						Labels: map[string]string{
 							corev1.LabelTopologyRegion: "region",
 							corev1.LabelTopologyZone:   "zone",
+							corev1.LabelHostname:       "node",
 						},
 					},
 				})
@@ -577,6 +579,7 @@ func TestEndpoints(t *testing.T) {
 						Labels: map[string]string{
 							corev1.LabelTopologyRegion: "region",
 							corev1.LabelTopologyZone:   "zone2",
+							corev1.LabelHostname:       "node2",
 						},
 					},
 				})
@@ -693,6 +696,7 @@ func TestEndpoints(t *testing.T) {
 						Labels: map[string]string{
 							corev1.LabelTopologyRegion: "region",
 							corev1.LabelTopologyZone:   "zone",
+							corev1.LabelHostname:       "node",
 							"label":                    "value",
 						},
 					},
@@ -842,6 +846,7 @@ func TestEndpoints(t *testing.T) {
 						Labels: map[string]string{
 							corev1.LabelTopologyRegion: "region1",
 							corev1.LabelTopologyZone:   "zone1",
+							corev1.LabelHostname:       "node1",
 							"app":                      "test",
 						},
 					},
@@ -1071,6 +1076,7 @@ func TestEndpoints(t *testing.T) {
 						Labels: map[string]string{
 							corev1.LabelTopologyRegion: "region1",
 							corev1.LabelTopologyZone:   "zone1",
+							corev1.LabelHostname:       "node1",
 						},
 					},
 				}

@@ -75,7 +75,12 @@ func (w *testingWriter) Write(p []byte) (n int, err error) {
 	w.RLock()
 	defer w.RUnlock()
 
-	w.t.Log(string(p)) // Write the log to testing.T
+	// Check if we have a valid test context before trying to log
+	// This prevents races when controller goroutines outlive the test
+	if w.t != nil {
+		w.t.Log(string(p)) // Write the log to testing.T
+	}
+	// Always return success to avoid breaking the logging chain
 	return len(p), nil
 }
 
@@ -141,6 +146,17 @@ func TestDestinationRule(t *testing.T) {
 		t.Fatalf("can't get settings %v", err)
 	}
 	runScenario(t, "testdata/istio_destination_rule", st)
+}
+
+func TestTrafficDistribution(t *testing.T) {
+	st, err := settings.BuildSettings()
+	if err != nil {
+		t.Fatalf("can't get settings %v", err)
+	}
+	st.EnableIstioIntegration = true
+
+	// these exercise applying a DR to a ServiceEntry
+	runScenario(t, "testdata/traffic_distribution", st)
 }
 
 func TestWithStandardSettings(t *testing.T) {
