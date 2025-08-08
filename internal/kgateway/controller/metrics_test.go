@@ -40,7 +40,7 @@ func TestGwControllerMetrics(t *testing.T) {
 		defer deleteGateway(t, ctx)
 
 		gathered := metricstest.MustGatherMetrics(TestReporter{t})
-			
+
 		gathered.AssertMetricsInclude("kgateway_controller_reconciliations_total", []metricstest.ExpectMetric{
 			&metricstest.ExpectedMetricValueTest{
 				Labels: []metrics.Label{
