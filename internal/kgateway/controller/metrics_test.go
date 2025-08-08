@@ -39,11 +39,8 @@ func TestGwControllerMetrics(t *testing.T) {
 		setupGateway(t, ctx)
 		defer deleteGateway(t, ctx)
 
-		gathered := metricstest.MustGatherMetricsContext(ctx, TestReporter{t},
-			"kgateway_controller_reconciliations_total",
-			"kgateway_controller_reconciliations_running",
-			"kgateway_controller_reconcile_duration_seconds")
-
+		gathered := metricstest.MustGatherMetrics(TestReporter{t})
+			
 		gathered.AssertMetricsInclude("kgateway_controller_reconciliations_total", []metricstest.ExpectMetric{
 			&metricstest.ExpectedMetricValueTest{
 				Labels: []metrics.Label{
@@ -170,10 +167,7 @@ func testGwControllerMetricsInactive(t *testing.T) {
 		setupGateway(t, ctx)
 		defer deleteGateway(t, ctx)
 
-		gathered := metricstest.MustGatherMetricsContext(ctx, TestReporter{t},
-			"kgateway_controller_reconciliations_total",
-			"kgateway_controller_reconciliations_running",
-			"kgateway_controller_reconcile_duration_seconds")
+		gathered := metricstest.MustGatherMetrics(TestReporter{t})
 
 		gathered.AssertMetricNotExists("kgateway_controller_reconciliations_total")
 		gathered.AssertMetricNotExists("kgateway_controller_reconciliations_running")
