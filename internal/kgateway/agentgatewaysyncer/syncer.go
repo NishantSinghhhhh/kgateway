@@ -571,7 +571,7 @@ func (s *AgentGwSyncer) buildBackendFromBackendIR(ctx krt.HandlerContext, backen
 }
 
 // newADPBackendCollection creates the ADP backend collection for agent gateway resources
-func (s *AgentGwSyncer) newADPBackendCollection(inputs Inputs, finalBackends krt.Collection[ir.BackendObjectIR], krtopts krtutil.KrtOptions) krt.Collection[envoyResourceWithCustomName] {
+func (s *AgentGwSyncer) newADPBackendCollection(inputs Inputs, finalBackends krt.Collection[ir.BackendObjectIR], krtopts krtinternal.KrtOptions) krt.Collection[envoyResourceWithCustomName] {
 	backends := krt.NewManyCollection(finalBackends, func(ctx krt.HandlerContext, backendIR ir.BackendObjectIR) []envoyResourceWithCustomName {
 		if backendIR.Group == wellknown.ServiceGVK.Group && backendIR.Kind == wellknown.ServiceGVK.Kind {
 			return nil
@@ -585,7 +585,7 @@ func (s *AgentGwSyncer) newADPBackendCollection(inputs Inputs, finalBackends krt
 // buildBackendCollections builds the filtered backend IR collection and the corresponding ADP backend collection
 func (s *AgentGwSyncer) buildBackendCollections(
 	inputs Inputs,
-	krtopts krtutil.KrtOptions,
+	krtopts krtinternal.KrtOptions,
 ) (krt.Collection[ir.BackendObjectIR], krt.Collection[envoyResourceWithCustomName]) {
 	// Get all backends with attached policies, filtering out Service backends
 	// Agent gateway handles Service references directly in routes and doesn't need separate backend objects
