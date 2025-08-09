@@ -614,7 +614,7 @@ func TestReferencedGateways(t *testing.T) {
 			},
 		},
 	}
-	gws := referencedGateways([]ir.HttpRouteIR{route1, route2, route3}, poolNN)
+	gws := referencedGateways(context.Background(), nil, []ir.HttpRouteIR{route1, route2, route3}, poolNN)
 	assert.Equal(t, map[types.NamespacedName]struct{}{
 		gw1: {},
 		gw2: {},
