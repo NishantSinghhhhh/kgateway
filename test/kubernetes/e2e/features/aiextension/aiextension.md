@@ -12,7 +12,6 @@ Before you begin, ensure you have the following installed:
 - **kubectl** and **kind**
 - **Docker**
 - A local system that supports **MetalLB** for exposing Kubernetes services  
-  _(The cluster setup script relies on this to assign an external IP to the gateway.)_
 
 ---
 
