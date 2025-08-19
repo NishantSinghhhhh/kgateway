@@ -61,13 +61,11 @@ Before deploying test resources, install all required CRDs and the controller us
 
 ```
 # Install CRDs
-helm install kgateway-crds charts/kgateway-crds --namespace ai-test --create-namespace
+helm install kgateway-crds install/helm/kgateway-crds --namespace ai-test --create-namespace
 
 # Install Controller
-helm install kgateway-controller charts/kgateway-controller --namespace ai-test
+helm install kgateway-controller install/helm/kgateway --namespace ai-test
 ```
-*Adjust chart names and paths as needed for your repository structure.*
-
 -----
 
 ### 5. Deploy test resources
