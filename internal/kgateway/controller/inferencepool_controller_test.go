@@ -14,6 +14,7 @@ import (
 	apiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/kgateway-dev/kgateway/v2/pkg/deployer"
+	"github.com/kgateway-dev/kgateway/v2/test/gomega/assertions"
 )
 
 func TestInferencePoolController(t *testing.T) {

@@ -74,6 +74,17 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: response
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.PromptguardResponse
+- name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.AWSGuardrailConfig
+  map:
+    fields:
+    - name: identifier
+      type:
+        scalar: string
+      default: ""
+    - name: version
+      type:
+        scalar: string
+      default: ""
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.AccessLog
   map:
     fields:
@@ -180,6 +191,9 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.AgentGateway
   map:
     fields:
+    - name: customConfigMapName
+      type:
+        scalar: string
     - name: enabled
       type:
         scalar: boolean
@@ -517,6 +531,22 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: maxInterval
       type:
         namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Duration
+- name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.BedrockConfig
+  map:
+    fields:
+    - name: auth
+      type:
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.AwsAuth
+    - name: guardrail
+      type:
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.AWSGuardrailConfig
+    - name: model
+      type:
+        scalar: string
+      default: ""
+    - name: region
+      type:
+        scalar: string
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.BodyTransformation
   map:
     fields:
@@ -906,7 +936,8 @@ var schemaYAML = typed.YAMLObject(`types:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.PolicyDisable
     - name: extensionRef
       type:
-        namedType: io.k8s.api.core.v1.LocalObjectReference
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.NamespacedObjectReference
+      default: {}
     - name: withRequestBody
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.BufferSettings
@@ -933,7 +964,8 @@ var schemaYAML = typed.YAMLObject(`types:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.PolicyDisable
     - name: extensionRef
       type:
-        namedType: io.k8s.api.core.v1.LocalObjectReference
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.NamespacedObjectReference
+      default: {}
     - name: processingMode
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.ProcessingMode
@@ -1218,6 +1250,15 @@ var schemaYAML = typed.YAMLObject(`types:
       type:
         namedType: io.k8s.sigs.gateway-api.apis.v1.HTTPHeaderMatch
       default: {}
+- name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.HeaderModifiers
+  map:
+    fields:
+    - name: request
+      type:
+        namedType: io.k8s.sigs.gateway-api.apis.v1.HTTPHeaderFilter
+    - name: response
+      type:
+        namedType: io.k8s.sigs.gateway-api.apis.v1.HTTPHeaderFilter
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.HeaderTransformation
   map:
     fields:
@@ -1487,6 +1528,12 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.LoadBalancerMaglevConfig
   map:
     fields:
+    - name: hashPolicies
+      type:
+        list:
+          elementType:
+            namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.HashPolicy
+          elementRelationship: atomic
     - name: useHostnameForHashing
       type:
         scalar: boolean
@@ -1505,6 +1552,12 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.LoadBalancerRingHashConfig
   map:
     fields:
+    - name: hashPolicies
+      type:
+        list:
+          elementType:
+            namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.HashPolicy
+          elementRelationship: atomic
     - name: maximumRingSize
       type:
         scalar: numeric
@@ -1569,6 +1622,25 @@ var schemaYAML = typed.YAMLObject(`types:
         map:
           elementType:
             scalar: string
+- name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.LocalPolicyTargetSelectorWithSectionName
+  map:
+    fields:
+    - name: group
+      type:
+        scalar: string
+      default: ""
+    - name: kind
+      type:
+        scalar: string
+      default: ""
+    - name: matchLabels
+      type:
+        map:
+          elementType:
+            scalar: string
+    - name: sectionName
+      type:
+        scalar: string
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.LocalRateLimitPolicy
   map:
     fields:
@@ -1670,6 +1742,16 @@ var schemaYAML = typed.YAMLObject(`types:
           elementType:
             namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.Priority
           elementRelationship: atomic
+- name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.NamespacedObjectReference
+  map:
+    fields:
+    - name: name
+      type:
+        scalar: string
+      default: ""
+    - name: namespace
+      type:
+        scalar: string
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.OTelTracesSampler
   map:
     fields:
@@ -1705,6 +1787,9 @@ var schemaYAML = typed.YAMLObject(`types:
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.CommonAccessLogGrpcService
       default: {}
+    - name: resourceAttributes
+      type:
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.KeyAnyValueList
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.OpenTelemetryTracingConfig
   map:
     fields:
@@ -1724,7 +1809,6 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: serviceName
       type:
         scalar: string
-      default: ""
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.Parameters
   map:
     fields:
@@ -1941,7 +2025,8 @@ var schemaYAML = typed.YAMLObject(`types:
           elementRelationship: atomic
     - name: extensionRef
       type:
-        namedType: io.k8s.api.core.v1.LocalObjectReference
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.NamespacedObjectReference
+      default: {}
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.RateLimitProvider
   map:
     fields:
@@ -1999,6 +2084,30 @@ var schemaYAML = typed.YAMLObject(`types:
         list:
           elementType:
             scalar: string
+          elementRelationship: atomic
+- name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.Retry
+  map:
+    fields:
+    - name: attempts
+      type:
+        scalar: numeric
+    - name: backoffBaseInterval
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Duration
+    - name: perTryTimeout
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Duration
+    - name: retryOn
+      type:
+        list:
+          elementType:
+            scalar: string
+          elementRelationship: atomic
+    - name: statusCodes
+      type:
+        list:
+          elementType:
+            scalar: numeric
           elementRelationship: atomic
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.RetryPolicy
   map:
@@ -2190,6 +2299,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: azureopenai
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.AzureOpenAIConfig
+    - name: bedrock
+      type:
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.BedrockConfig
     - name: gemini
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.GeminiConfig
@@ -2259,6 +2371,15 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: tlsKey
       type:
         scalar: string
+- name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.Timeouts
+  map:
+    fields:
+    - name: request
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Duration
+    - name: streamIdle
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Duration
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.TokenBucket
   map:
     fields:
@@ -2354,15 +2475,15 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: extProc
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.ExtProcPolicy
-    - name: hashPolicies
+    - name: headerModifiers
       type:
-        list:
-          elementType:
-            namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.HashPolicy
-          elementRelationship: atomic
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.HeaderModifiers
     - name: rateLimit
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.RateLimit
+    - name: retry
+      type:
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.Retry
     - name: targetRefs
       type:
         list:
@@ -2373,8 +2494,11 @@ var schemaYAML = typed.YAMLObject(`types:
       type:
         list:
           elementType:
-            namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.LocalPolicyTargetSelector
+            namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.LocalPolicyTargetSelectorWithSectionName
           elementRelationship: atomic
+    - name: timeouts
+      type:
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.Timeouts
     - name: transformation
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.TransformationPolicy
@@ -3525,6 +3649,42 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: weight
       type:
         scalar: numeric
+- name: io.k8s.sigs.gateway-api.apis.v1.HTTPHeader
+  map:
+    fields:
+    - name: name
+      type:
+        scalar: string
+      default: ""
+    - name: value
+      type:
+        scalar: string
+      default: ""
+- name: io.k8s.sigs.gateway-api.apis.v1.HTTPHeaderFilter
+  map:
+    fields:
+    - name: add
+      type:
+        list:
+          elementType:
+            namedType: io.k8s.sigs.gateway-api.apis.v1.HTTPHeader
+          elementRelationship: associative
+          keys:
+          - name
+    - name: remove
+      type:
+        list:
+          elementType:
+            scalar: string
+          elementRelationship: associative
+    - name: set
+      type:
+        list:
+          elementType:
+            namedType: io.k8s.sigs.gateway-api.apis.v1.HTTPHeader
+          elementRelationship: associative
+          keys:
+          - name
 - name: io.k8s.sigs.gateway-api.apis.v1.HTTPHeaderMatch
   map:
     fields:
