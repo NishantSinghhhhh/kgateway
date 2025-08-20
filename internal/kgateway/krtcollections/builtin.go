@@ -140,7 +140,6 @@ func NewBuiltinPlugin(ctx context.Context) extensionsplug.Plugin {
 	return extensionsplug.Plugin{
 		ContributesPolicies: map[schema.GroupKind]extensionsplug.PolicyPlugin{
 			pluginsdkir.VirtualBuiltInGK: {
-				// AttachmentPoints: []ir.AttachmentPoints{ir.HttpAttachmentPoint},
 				NewGatewayTranslationPass: NewGatewayTranslationPass,
 			},
 		},
@@ -644,6 +643,7 @@ func (p *builtinPluginGwPass) HttpFilters(ctx context.Context, fcc ir.FilterChai
 		if err != nil {
 			return nil, err
 		}
+		stagedFilter.Filter.Disabled = true
 		builtinStaged = append(builtinStaged, stagedFilter)
 	}
 
