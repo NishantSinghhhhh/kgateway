@@ -10,7 +10,6 @@ import (
 	istiokube "istio.io/istio/pkg/kube"
 	"istio.io/istio/pkg/kube/krt"
 	"istio.io/istio/pkg/kube/kubetypes"
-	istiolog "istio.io/istio/pkg/log"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
@@ -375,10 +374,6 @@ func SetupLogging(levelStr string) {
 	// set klog logger
 	klogLogger := logr.FromSlogHandler(logging.New("klog").Handler())
 	klog.SetLogger(klogLogger)
-
-	istioOpts := istiolog.DefaultOptions()
-	istioOpts.JSONEncoding = true
-	istiolog.Configure(istioOpts)
 }
 
 func CreateKubeClient(restConfig *rest.Config) (istiokube.Client, error) {
