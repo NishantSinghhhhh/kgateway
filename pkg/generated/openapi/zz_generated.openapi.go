@@ -139,6 +139,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/kgateway-dev/kgateway/v2/api/v1alpha1.OpenAIConfig":                              schema_kgateway_v2_api_v1alpha1_OpenAIConfig(ref),
 		"github.com/kgateway-dev/kgateway/v2/api/v1alpha1.OpenTelemetryAccessLogService":             schema_kgateway_v2_api_v1alpha1_OpenTelemetryAccessLogService(ref),
 		"github.com/kgateway-dev/kgateway/v2/api/v1alpha1.OpenTelemetryTracingConfig":                schema_kgateway_v2_api_v1alpha1_OpenTelemetryTracingConfig(ref),
+		"github.com/kgateway-dev/kgateway/v2/api/v1alpha1.OutlierDetection":                          schema_kgateway_v2_api_v1alpha1_OutlierDetection(ref),
 		"github.com/kgateway-dev/kgateway/v2/api/v1alpha1.Parameters":                                schema_kgateway_v2_api_v1alpha1_Parameters(ref),
 		"github.com/kgateway-dev/kgateway/v2/api/v1alpha1.PathOverride":                              schema_kgateway_v2_api_v1alpha1_PathOverride(ref),
 		"github.com/kgateway-dev/kgateway/v2/api/v1alpha1.Pod":                                       schema_kgateway_v2_api_v1alpha1_Pod(ref),
@@ -1737,11 +1738,17 @@ func schema_kgateway_v2_api_v1alpha1_BackendConfigPolicySpec(ref common.Referenc
 							Ref:         ref("github.com/kgateway-dev/kgateway/v2/api/v1alpha1.HealthCheck"),
 						},
 					},
+					"outlierDetection": {
+						SchemaProps: spec.SchemaProps{
+							Description: "OutlierDetection contains the options necessary to configure passive health checking.",
+							Ref:         ref("github.com/kgateway-dev/kgateway/v2/api/v1alpha1.OutlierDetection"),
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/kgateway-dev/kgateway/v2/api/v1alpha1.CommonHttpProtocolOptions", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.HealthCheck", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.Http1ProtocolOptions", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.Http2ProtocolOptions", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.LoadBalancer", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.LocalPolicyTargetReference", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.LocalPolicyTargetSelector", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.TCPKeepalive", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.TLS", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+			"github.com/kgateway-dev/kgateway/v2/api/v1alpha1.CommonHttpProtocolOptions", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.HealthCheck", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.Http1ProtocolOptions", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.Http2ProtocolOptions", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.LoadBalancer", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.LocalPolicyTargetReference", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.LocalPolicyTargetSelector", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.OutlierDetection", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.TCPKeepalive", "github.com/kgateway-dev/kgateway/v2/api/v1alpha1.TLS", "k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
 	}
 }
 
@@ -2367,20 +2374,25 @@ func schema_kgateway_v2_api_v1alpha1_Cookie(ref common.ReferenceCallback) common
 							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
 						},
 					},
-					"attributes": {
+					"secure": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Attributes are additional attributes for the cookie.",
-							Type:        []string{"object"},
-							AdditionalProperties: &spec.SchemaOrBool{
-								Allows: true,
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Default: "",
-										Type:    []string{"string"},
-										Format:  "",
-									},
-								},
-							},
+							Description: "Secure specifies whether the cookie is secure. If true, the cookie will only be sent over HTTPS.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"httpOnly": {
+						SchemaProps: spec.SchemaProps{
+							Description: "HttpOnly specifies whether the cookie is HTTP only, i.e. not accessible to JavaScript.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
+					"sameSite": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SameSite controls cross-site sending of cookies. Supported values are Strict, Lax, and None.",
+							Type:        []string{"string"},
+							Format:      "",
 						},
 					},
 				},
@@ -5536,6 +5548,47 @@ func schema_kgateway_v2_api_v1alpha1_OpenTelemetryTracingConfig(ref common.Refer
 	}
 }
 
+func schema_kgateway_v2_api_v1alpha1_OutlierDetection(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "OutlierDetection contains the options to configure passive health checks. See [Envoy documentation](https://www.envoyproxy.io/docs/envoy/latest/intro/arch_overview/upstream/outlier#outlier-detection) for more details.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"consecutive5xx": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The number of consecutive server-side error responses (for HTTP traffic, 5xx responses; for TCP traffic, connection failures; etc.) before an ejection occurs. Defaults to 5. If this is zero, consecutive 5xx passive health checks will be disabled. In the future, other types of passive health checking might be added, but none will be enabled by default.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+					"interval": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The time interval between ejection analysis sweeps. This can result in both new ejections as well as hosts being returned to service. Defaults to 10s.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"baseEjectionTime": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The base time that a host is ejected for. The real time is equal to the base time multiplied by the number of times the host has been ejected. Defaults to 30s.",
+							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Duration"),
+						},
+					},
+					"maxEjectionPercent": {
+						SchemaProps: spec.SchemaProps{
+							Description: "The maximum % of an upstream cluster that can be ejected due to outlier detection. Defaults to 10%.",
+							Type:        []string{"integer"},
+							Format:      "int64",
+						},
+					},
+				},
+			},
+		},
+		Dependencies: []string{
+			"k8s.io/apimachinery/pkg/apis/meta/v1.Duration"},
+	}
+}
+
 func schema_kgateway_v2_api_v1alpha1_Parameters(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
@@ -6055,6 +6108,13 @@ func schema_kgateway_v2_api_v1alpha1_ProxyDeployment(ref common.ReferenceCallbac
 							Description: "The number of desired pods. Defaults to 1.",
 							Type:        []string{"integer"},
 							Format:      "int64",
+						},
+					},
+					"omitReplicas": {
+						SchemaProps: spec.SchemaProps{
+							Description: "If true, replicas will not be set in the deployment (allowing HPA to control scaling)",
+							Type:        []string{"boolean"},
+							Format:      "",
 						},
 					},
 				},
