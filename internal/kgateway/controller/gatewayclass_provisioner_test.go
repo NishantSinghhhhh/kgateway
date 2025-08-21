@@ -2,9 +2,10 @@ package controller_test
 
 import (
 	"context"
-	"testing"
 	"time"
 
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -19,264 +20,234 @@ const (
 	interval = time.Millisecond * 250
 )
 
-func TestGatewayClassProvisioner(t *testing.T) {
-	t.Run("no GatewayClasses exist on the cluster", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer func() {
-			if cancel != nil {
-				cancel()
-			}
-			// ensure goroutines cleanup
-			time.Sleep(3 * time.Second)
-		}()
+var _ = Describe("GatewayClassProvisioner", func() {
+	var (
+		ctx              context.Context
+		cancel           context.CancelFunc
+		goroutineMonitor *assertions.GoRoutineMonitor
+	)
 
-		managerCancel, err := createManager(t, ctx, nil, nil)
-		assertNoError(t, err)
-		defer managerCancel()
-
-		// should create the default GCs
-		assertEventually(t, func() bool {
-			gcs := &apiv1.GatewayClassList{}
-			err := k8sClient.List(ctx, gcs)
-			if err != nil {
-				return false
-			}
-			if len(gcs.Items) != gwClasses.Len() {
-				return false
-			}
-			for _, gc := range gcs.Items {
-				if !gwClasses.Has(gc.Name) {
-					return false
-				}
-			}
-			return true
-		}, timeout, interval, "expected default GatewayClasses to be created")
+	BeforeEach(func() {
+		ctx, cancel = context.WithCancel(context.Background())
+		goroutineMonitor = assertions.NewGoRoutineMonitor()
 	})
 
-	t.Run("existing GatewayClasses from other controllers exist on the cluster", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer func() {
-			if cancel != nil {
-				cancel()
-			}
-			// ensure goroutines cleanup
-			time.Sleep(3 * time.Second)
-		}()
-
-		// Create GatewayClass owned by another controller
-		otherGC := &apiv1.GatewayClass{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "other-controller",
-			},
-			Spec: apiv1.GatewayClassSpec{
-				ControllerName: "other.controller/name",
-			},
-		}
-		assertNoError(t, k8sClient.Create(ctx, otherGC))
-		defer func() {
-			k8sClient.Delete(ctx, otherGC)
-		}()
-
-		// Create our GatewayClass but with wrong controller
-		wrongControllerGC := &apiv1.GatewayClass{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "wrong-controller",
-			},
-			Spec: apiv1.GatewayClassSpec{
-				ControllerName: "wrong.controller/name",
-			},
-		}
-		assertNoError(t, k8sClient.Create(ctx, wrongControllerGC))
-		defer func() {
-			k8sClient.Delete(ctx, wrongControllerGC)
-		}()
-
-		managerCancel, err := createManager(t, ctx, nil, nil)
-		assertNoError(t, err)
-		defer managerCancel()
-
-		// should create our GCs and not affect others
-		// verifying our GatewayClasses are created with correct controller
-		assertEventually(t, func() bool {
-			for className := range gwClasses {
-				gc := &apiv1.GatewayClass{}
-				if err := k8sClient.Get(ctx, types.NamespacedName{Name: className}, gc); err != nil {
-					return false
-				}
-				if gc.Spec.ControllerName != apiv1.GatewayController(gatewayControllerName) {
-					return false
-				}
-			}
-			return true
-		}, timeout, interval, "expected our GatewayClasses to be created with correct controller")
+	AfterEach(func() {
+		cancel()
+		waitForGoroutinesToFinish(goroutineMonitor)
 	})
 
-	t.Run("the default GCs are deleted", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer func() {
-			if cancel != nil {
-				cancel()
-			}
-			// ensure goroutines cleanup
-			time.Sleep(3 * time.Second)
-		}()
+	When("no GatewayClasses exist on the cluster", func() {
+		BeforeEach(func() {
+			var err error
+			cancel, err = createManager(ctx, nil, nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
 
-		managerCancel, err := createManager(t, ctx, nil, nil)
-		assertNoError(t, err)
-		defer managerCancel()
-
-		// wait for the default GCs to be created, especially needed if this is the first test to run
-		gc := &apiv1.GatewayClass{}
-		assertEventually(t, func() bool {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, gc) == nil
-		}, timeout, interval, "expected default GatewayClass to be created initially")
-
-		// deleting the default GCs
-		for name := range gwClasses {
-			err := k8sClient.Delete(ctx, &apiv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: name}})
-			assertNoError(t, err)
-		}
-
-		// waiting for the GCs to be recreated - should be recreated by the provisioner
-		assertEventually(t, func() bool {
-			gcs := &apiv1.GatewayClassList{}
-			err := k8sClient.List(ctx, gcs)
-			if err != nil {
-				return false
-			}
-			return len(gcs.Items) == gwClasses.Len()
-		}, timeout, interval, "expected GatewayClasses to be recreated after deletion")
-
-		// Cleanup verification
-		assertEventually(t, func() bool {
-			gcs := &apiv1.GatewayClassList{}
-			err := k8sClient.List(ctx, gcs)
-			return err == nil && len(gcs.Items) == gwClasses.Len()
-		}, timeout, interval, "expected final GatewayClass count to be correct")
+		It("should create the default GCs", func() {
+			Eventually(func() bool {
+				gcs := &apiv1.GatewayClassList{}
+				err := k8sClient.List(ctx, gcs)
+				if err != nil {
+					return false
+				}
+				if len(gcs.Items) != gwClasses.Len() {
+					return false
+				}
+				for _, gc := range gcs.Items {
+					if !gwClasses.Has(gc.Name) {
+						return false
+					}
+				}
+				return true
+			}, timeout, interval).Should(BeTrue())
+		})
 	})
 
-	t.Run("a default GC is updated", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer func() {
-			if cancel != nil {
-				cancel()
+	When("existing GatewayClasses from other controllers exist on the cluster", func() {
+		var (
+			otherGC           *apiv1.GatewayClass
+			wrongControllerGC *apiv1.GatewayClass
+		)
+		BeforeEach(func() {
+			// Create GatewayClass owned by another controller
+			otherGC = &apiv1.GatewayClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "other-controller",
+				},
+				Spec: apiv1.GatewayClassSpec{
+					ControllerName: "other.controller/name",
+				},
 			}
-			// ensure goroutines cleanup
-			time.Sleep(3 * time.Second)
-		}()
+			Expect(k8sClient.Create(ctx, otherGC)).To(Succeed())
 
-		managerCancel, err := createManager(t, ctx, nil, nil)
-		assertNoError(t, err)
-		defer managerCancel()
+			// Create our GatewayClass but with wrong controller
+			wrongControllerGC = &apiv1.GatewayClass{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "wrong-controller",
+				},
+				Spec: apiv1.GatewayClassSpec{
+					ControllerName: "wrong.controller/name",
+				},
+			}
+			Expect(k8sClient.Create(ctx, wrongControllerGC)).To(Succeed())
 
-		// getting the default GC
-		gc := &apiv1.GatewayClass{}
-		assertEventually(t, func() bool {
-			return k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, gc) == nil
-		}, timeout, interval, "expected to get default GatewayClass")
+			var err error
+			cancel, err = createManager(ctx, nil, nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
 
-		var description string
-		if gc.Spec.Description != nil {
+		AfterEach(func() {
+			// Cleanup the test GatewayClasses
+			Expect(k8sClient.Delete(ctx, otherGC)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, wrongControllerGC)).To(Succeed())
+		})
+
+		It("should create our GCs and not affect others", func() {
+			By("verifying our GatewayClasses are created with correct controller")
+			Eventually(func() bool {
+				for className := range gwClasses {
+					gc := &apiv1.GatewayClass{}
+					if err := k8sClient.Get(ctx, types.NamespacedName{Name: className}, gc); err != nil {
+						return false
+					}
+					if gc.Spec.ControllerName != apiv1.GatewayController(gatewayControllerName) {
+						return false
+					}
+				}
+				return true
+			}, timeout, interval).Should(BeTrue())
+		})
+	})
+
+	When("the default GCs are deleted", func() {
+		BeforeEach(func() {
+			var err error
+			cancel, err = createManager(ctx, nil, nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			Eventually(func() bool {
+				gcs := &apiv1.GatewayClassList{}
+				err := k8sClient.List(ctx, gcs)
+				return err == nil && len(gcs.Items) == gwClasses.Len()
+			}, timeout, interval).Should(BeTrue())
+		})
+
+		It("should be recreated by the provisioner", func() {
+			By("deleting the default GCs")
+
+			// wait for the default GCs to be created, especially needed if this is the first test to run
+			gc := &apiv1.GatewayClass{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, gc)
+			}, timeout, interval).Should(Succeed())
+
+			for name := range gwClasses {
+				err := k8sClient.Delete(ctx, &apiv1.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: name}})
+				Expect(err).NotTo(HaveOccurred())
+			}
+			By("waiting for the GCs to be recreated")
+			Eventually(func() bool {
+				gcs := &apiv1.GatewayClassList{}
+				err := k8sClient.List(ctx, gcs)
+				if err != nil {
+					return false
+				}
+				return len(gcs.Items) == gwClasses.Len()
+			}, timeout, interval).Should(BeTrue())
+		})
+	})
+
+	When("a default GC is updated", func() {
+		var (
+			description string
+		)
+		BeforeEach(func() {
+			var err error
+			cancel, err = createManager(ctx, nil, nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("getting the default GC")
+			gc := &apiv1.GatewayClass{}
+			Eventually(func() error {
+				return k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, gc)
+			}, timeout, interval).Should(Succeed())
 			description = *gc.Spec.Description
-		}
+		})
 
-		defer func() {
-			// restoring the default GC value
+		AfterEach(func() {
+			By("restoring the default GC value")
 			gc := &apiv1.GatewayClass{}
 			err := k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, gc)
-			if err == nil {
-				gc.Spec.Description = ptr.To(description)
-				k8sClient.Update(ctx, gc)
-			}
-		}()
+			Expect(err).NotTo(HaveOccurred())
+			gc.Spec.Description = ptr.To(description)
+			err = k8sClient.Update(ctx, gc)
+			Expect(err).NotTo(HaveOccurred())
+		})
 
-		// should not be overwritten by the provisioner
-		// updating a default GC
-		assertEventually(t, func() bool {
-			gc = &apiv1.GatewayClass{}
-			err := k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, gc)
-			return err == nil
-		}, timeout, interval, "expected to get GatewayClass for update")
+		It("should not be overwritten by the provisioner", func() {
+			By("updating a default GC")
+			var gc *apiv1.GatewayClass
+			Eventually(func() bool {
+				gc = &apiv1.GatewayClass{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, gc)
+				return err == nil
+			}, timeout, interval).Should(BeTrue())
 
-		// updating the GC
-		gc.Spec.Description = ptr.To("updated")
-		err = k8sClient.Update(ctx, gc)
-		assertNoError(t, err)
+			By("updating the GC")
+			gc.Spec.Description = ptr.To("updated")
+			err := k8sClient.Update(ctx, gc)
+			Expect(err).NotTo(HaveOccurred())
 
-		// waiting for the GC to be updated
-		assertEventually(t, func() bool {
-			gc = &apiv1.GatewayClass{}
-			err := k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, gc)
-			if err != nil {
-				return false
-			}
-			if gc.Spec.Description == nil {
-				return false
-			}
-			return *gc.Spec.Description == "updated"
-		}, timeout, interval, "expected GatewayClass description to remain updated")
+			By("waiting for the GC to be updated")
+			Eventually(func() bool {
+				gc = &apiv1.GatewayClass{}
+				err := k8sClient.Get(ctx, types.NamespacedName{Name: gatewayClassName}, gc)
+				if err != nil {
+					return false
+				}
+				if gc.Spec.Description == nil {
+					return false
+				}
+				return *gc.Spec.Description == "updated"
+			}, timeout, interval).Should(BeTrue())
+		})
 	})
 
-	t.Run("custom GatewayClass configurations are provided", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer func() {
-			if cancel != nil {
-				cancel()
-			}
-			// ensure goroutines cleanup
-			time.Sleep(3 * time.Second)
-		}()
+	When("custom GatewayClass configurations are provided", func() {
+		var customClassConfigs map[string]*controller.ClassInfo
 
-		customClassConfigs := map[string]*controller.ClassInfo{
-			"custom-class": {
-				Description: "custom gateway class",
-				Labels: map[string]string{
-					"custom": "true",
+		BeforeEach(func() {
+			customClassConfigs = map[string]*controller.ClassInfo{
+				"custom-class": {
+					Description: "custom gateway class",
+					Labels: map[string]string{
+						"custom": "true",
+					},
+					Annotations: map[string]string{
+						"custom.annotation": "value",
+					},
 				},
-				Annotations: map[string]string{
-					"custom.annotation": "value",
-				},
-			},
-		}
-
-		managerCancel, err := createManager(t, ctx, nil, customClassConfigs)
-		assertNoError(t, err)
-		defer managerCancel()
-
-		// should create GatewayClasses with custom configurations
-		assertEventually(t, func() bool {
-			gc := &apiv1.GatewayClass{}
-			if err := k8sClient.Get(ctx, types.NamespacedName{Name: "custom-class"}, gc); err != nil {
-				return false
 			}
-			return gc.Spec.ControllerName == apiv1.GatewayController(gatewayControllerName) &&
-				gc.Spec.Description != nil &&
-				*gc.Spec.Description == "custom gateway class" &&
-				gc.Labels["custom"] == "true" &&
-				gc.Annotations["custom.annotation"] == "value"
-		}, timeout, interval, "expected custom GatewayClass to be created with correct configuration")
+
+			var err error
+			cancel, err = createManager(ctx, nil, customClassConfigs)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should create GatewayClasses with custom configurations", func() {
+			Eventually(func() bool {
+				gc := &apiv1.GatewayClass{}
+				if err := k8sClient.Get(ctx, types.NamespacedName{Name: "custom-class"}, gc); err != nil {
+					return false
+				}
+				return gc.Spec.ControllerName == apiv1.GatewayController(gatewayControllerName) &&
+					*gc.Spec.Description == "custom gateway class" &&
+					gc.Labels["custom"] == "true" &&
+					gc.Annotations["custom.annotation"] == "value"
+			}, timeout, interval).Should(BeTrue())
+		})
 	})
-}
-
-// assertEventually polls a condition function until it returns true or times out
-func assertEventually(t *testing.T, condition func() bool, timeout, interval time.Duration, msgAndArgs ...interface{}) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		time.Sleep(interval)
-	}
-
-	// Build error message
-	msg := "condition was not met within timeout"
-	if len(msgAndArgs) > 0 {
-		if str, ok := msgAndArgs[0].(string); ok {
-			msg = str
-		}
-	}
-
-	t.Fatalf("assertEventually failed: %s (timeout: %v)", msg, timeout)
-}
+})

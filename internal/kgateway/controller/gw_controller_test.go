@@ -1,199 +1,234 @@
 package controller_test
 
 import (
-	"context"
-	"testing"
-	"time"
+	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	api "sigs.k8s.io/gateway-api/apis/v1"
+	infextv1a2 "sigs.k8s.io/gateway-api-inference-extension/api/v1alpha2"
+	apiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/kgateway-dev/kgateway/v2/pkg/deployer"
 	"github.com/kgateway-dev/kgateway/v2/test/gomega/assertions"
 )
 
-// TestGwController tests the GwController functionality
-func TestGwController(t *testing.T) {
-	testCases := []struct {
-		name    string
-		gwClass string
-	}{
-		{"default gateway class", gatewayClassName},
-		{"alternative gateway class", altGatewayClassName},
-		{"self managed gateway", selfManagedGatewayClassName},
-	}
+var _ = Describe("InferencePool controller", func() {
+	var (
+		goroutineMonitor *assertions.GoRoutineMonitor
+	)
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := setupGwControllerTest(t)
-			defer teardownGwControllerTest(t, cancel)
+	BeforeEach(func() {
+		goroutineMonitor = assertions.NewGoRoutineMonitor()
+	})
 
-			testShouldAddStatusToGateway(t, ctx, tc.gwClass)
+	AfterEach(func() {
+		cancel()
+		waitForGoroutinesToFinish(goroutineMonitor)
+	})
+
+	Context("when Inference Extension deployer is enabled", func() {
+		BeforeEach(func() {
+			var err error
+			inferenceExt = new(deployer.InferenceExtInfo)
+			cancel, err = createManager(ctx, inferenceExt, nil)
+			Expect(err).NotTo(HaveOccurred())
 		})
-	}
-}
 
-func setupGwControllerTest(t *testing.T) (context.Context, context.CancelFunc) {
-	t.Helper()
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	var err error
-	managerCancel, err := createManager(t, ctx, inferenceExt, nil)
-	if err != nil {
-		cancel()
-		t.Fatalf("Failed to create manager: %v", err)
-	}
-
-	// Return a combined cancel function
-	combinedCancel := func() {
-		if managerCancel != nil {
-			managerCancel()
-		}
-		cancel()
-	}
-
-	return ctx, combinedCancel
-}
-
-func teardownGwControllerTest(t *testing.T, cancel context.CancelFunc) {
-	t.Helper()
-
-	if cancel != nil {
-		cancel()
-	}
-	// ensure goroutines cleanup
-	waitForCondition(t, func() bool { return true }, 3*time.Second, 100*time.Millisecond, "goroutines cleanup")
-}
-
-func testShouldAddStatusToGateway(t *testing.T, ctx context.Context, gwClass string) {
-	same := api.NamespacesFromSame
-	gwName := "gw-" + gwClass
-	gw := api.Gateway{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      gwName,
-			Namespace: "default",
-		},
-		Spec: api.GatewaySpec{
-			Addresses: []api.GatewaySpecAddress{{
-				Type:  ptr.To(api.IPAddressType),
-				Value: "127.0.0.1",
-			}},
-			GatewayClassName: api.ObjectName(gwClass),
-			Listeners: []api.Listener{{
-				Protocol: "HTTP",
-				Port:     80,
-				AllowedRoutes: &api.AllowedRoutes{
-					Namespaces: &api.RouteNamespaces{
-						From: &same,
+		It("should reconcile an InferencePool referenced by a managed HTTPRoute and deploy the endpoint picker", func() {
+			// Create a test Gateway that will be referenced by the HTTPRoute.
+			testGw := &apiv1.Gateway{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-gateway",
+					Namespace: defaultNamespace,
+				},
+				Spec: apiv1.GatewaySpec{
+					GatewayClassName: gatewayClassName,
+					Listeners: []apiv1.Listener{
+						{
+							Name:     "listener-1",
+							Protocol: apiv1.HTTPProtocolType,
+							Port:     80,
+						},
 					},
 				},
-				Name: "listener",
-			}},
-		},
-	}
-
-	err := k8sClient.Create(ctx, &gw)
-	if err != nil {
-		t.Fatalf("Failed to create gateway: %v", err)
-	}
-
-	if gwClass != selfManagedGatewayClassName {
-		svc := waitForGatewayServiceSimple(t, ctx, &gw)
-
-		// Need to update the status of the service
-		svc.Status.LoadBalancer = corev1.LoadBalancerStatus{
-			Ingress: []corev1.LoadBalancerIngress{{
-				IP: "127.0.0.1",
-			}},
-		}
-
-		waitForConditionWithError(t, func() error {
-			return k8sClient.Status().Update(ctx, &svc)
-		}, timeout, interval, "service status update")
-	}
-
-	waitForCondition(t, func() bool {
-		err := k8sClient.Get(ctx, client.ObjectKey{Name: gwName, Namespace: "default"}, &gw)
-		if err != nil {
-			return false
-		}
-		if len(gw.Status.Addresses) == 0 {
-			return false
-		}
-		return true
-	}, timeout, interval, "gateway status addresses update")
-
-	if len(gw.Status.Addresses) != 1 {
-		t.Errorf("Expected gateway to have 1 address, got %d", len(gw.Status.Addresses))
-	}
-
-	if gw.Status.Addresses[0].Type == nil || *gw.Status.Addresses[0].Type != api.IPAddressType {
-		t.Errorf("Expected address type %s, got %v", api.IPAddressType, gw.Status.Addresses[0].Type)
-	}
-
-	if gw.Status.Addresses[0].Value != "127.0.0.1" {
-		t.Errorf("Expected address value '127.0.0.1', got '%s'", gw.Status.Addresses[0].Value)
-	}
-}
-
-// waitForGatewayServiceSimple is a version of waitForGatewayService that matches the original signature
-func waitForGatewayServiceSimple(t *testing.T, ctx context.Context, gw *api.Gateway) corev1.Service {
-	t.Helper()
-
-	var svc corev1.Service
-
-	waitForCondition(t, func() bool {
-		var createdServices corev1.ServiceList
-		err := k8sClient.List(ctx, &createdServices)
-		if err != nil {
-			return false
-		}
-		for _, s := range createdServices.Items {
-			if len(s.ObjectMeta.OwnerReferences) == 1 && s.ObjectMeta.OwnerReferences[0].UID == gw.GetUID() {
-				svc = s
-				return true
 			}
-		}
-		return false
-	}, timeout, interval, "service not created")
+			err := k8sClient.Create(ctx, testGw)
+			Expect(err).NotTo(HaveOccurred())
 
-	if svc.Spec.ClusterIP == "" {
-		t.Errorf("Expected service ClusterIP to not be empty")
-	}
+			// Create an HTTPRoute without a status.
+			httpRoute := &apiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-route",
+					Namespace: defaultNamespace,
+				},
+				Spec: apiv1.HTTPRouteSpec{
+					Rules: []apiv1.HTTPRouteRule{
+						{
+							BackendRefs: []apiv1.HTTPBackendRef{
+								{
+									BackendRef: apiv1.BackendRef{
+										BackendObjectReference: apiv1.BackendObjectReference{
+											Group: ptr.To(apiv1.Group(infextv1a2.GroupVersion.Group)),
+											Kind:  ptr.To(apiv1.Kind("InferencePool")),
+											Name:  "pool1",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(ctx, httpRoute)
+			Expect(err).NotTo(HaveOccurred())
 
-	return svc
-}
+			// Now update the status to include a valid Parents field.
+			httpRoute.Status = apiv1.HTTPRouteStatus{
+				RouteStatus: apiv1.RouteStatus{
+					Parents: []apiv1.RouteParentStatus{
+						{
+							ParentRef: apiv1.ParentReference{
+								Group:     ptr.To(apiv1.Group("gateway.networking.k8s.io")),
+								Kind:      ptr.To(apiv1.Kind("Gateway")),
+								Name:      apiv1.ObjectName(testGw.Name),
+								Namespace: ptr.To(apiv1.Namespace(defaultNamespace)),
+							},
+							ControllerName: gatewayControllerName,
+						},
+					},
+				},
+			}
+			Eventually(func() error {
+				return k8sClient.Status().Update(ctx, httpRoute)
+			}, "10s", "1s").Should(Succeed())
 
-// Helper function to wait with timeout and interval checking
-func waitForCondition(t *testing.T, condition func() bool, timeout, interval time.Duration, msg string) {
-	t.Helper()
+			// Create an InferencePool resource that is referenced by the HTTPRoute.
+			pool := &infextv1a2.InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: infextv1a2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pool1",
+					Namespace: defaultNamespace,
+					UID:       "pool-uid",
+				},
+				Spec: infextv1a2.InferencePoolSpec{
+					Selector:         map[infextv1a2.LabelKey]infextv1a2.LabelValue{},
+					TargetPortNumber: 1234,
+					EndpointPickerConfig: infextv1a2.EndpointPickerConfig{
+						ExtensionRef: &infextv1a2.Extension{
+							ExtensionReference: infextv1a2.ExtensionReference{
+								Name: "doesnt-matter",
+							},
+						},
+					},
+				},
+			}
+			err = k8sClient.Create(ctx, pool)
+			Expect(err).NotTo(HaveOccurred())
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		time.Sleep(interval)
-	}
-	t.Fatalf("Condition not met within timeout: %s", msg)
-}
+			// The secondary watch on HTTPRoute should now trigger reconciliation of pool "pool1".
+			// We expect the deployer to render and deploy an endpoint picker Deployment with name "pool1-endpoint-picker".
+			expectedName := fmt.Sprintf("%s-endpoint-picker", pool.Name)
+			var deploy appsv1.Deployment
+			Eventually(func() error {
+				return k8sClient.Get(ctx, client.ObjectKey{Namespace: defaultNamespace, Name: expectedName}, &deploy)
+			}, "10s", "1s").Should(Succeed())
+		})
 
-// Helper function to wait for condition with error
-func waitForConditionWithError(t *testing.T, condition func() error, timeout, interval time.Duration, msg string) {
-	t.Helper()
+		It("should ignore an InferencePool not referenced by any HTTPRoute and not deploy the endpoint picker", func() {
+			// Create an InferencePool that is not referenced by any HTTPRoute.
+			pool := &infextv1a2.InferencePool{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "InferencePool",
+					APIVersion: infextv1a2.GroupVersion.String(),
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pool2",
+					Namespace: defaultNamespace,
+					UID:       "pool2-uid",
+				},
+				Spec: infextv1a2.InferencePoolSpec{
+					Selector:         map[infextv1a2.LabelKey]infextv1a2.LabelValue{},
+					TargetPortNumber: 1234,
+					EndpointPickerConfig: infextv1a2.EndpointPickerConfig{
+						ExtensionRef: &infextv1a2.Extension{
+							ExtensionReference: infextv1a2.ExtensionReference{
+								Name: "doesnt-matter",
+							},
+						},
+					},
+				},
+			}
+			err := k8sClient.Create(ctx, pool)
+			Expect(err).NotTo(HaveOccurred())
 
-	deadline := time.Now().Add(timeout)
-	var lastErr error
-	for time.Now().Before(deadline) {
-		if err := condition(); err == nil {
-			return
-		} else {
-			lastErr = err
-		}
-		time.Sleep(interval)
-	}
-	t.Fatalf("Condition not met within timeout: %s, last error: %v", msg, lastErr)
-}
+			// Consistently check that no endpoint picker deployment is created.
+			Consistently(func() error {
+				var dep appsv1.Deployment
+				return k8sClient.Get(ctx, client.ObjectKey{Namespace: defaultNamespace, Name: fmt.Sprintf("%s-endpoint-picker", pool.Name)}, &dep)
+			}, "5s", "1s").ShouldNot(Succeed())
+		})
+	})
+
+	Context("when Inference Extension deployer is disabled", func() {
+		BeforeEach(func() {
+			var err error
+			inferenceExt = nil
+			cancel, err = createManager(ctx, inferenceExt, nil)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should not deploy endpoint picker resources", func() {
+			httpRoute := &apiv1.HTTPRoute{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-route-disabled",
+					Namespace: defaultNamespace,
+				},
+				Spec: apiv1.HTTPRouteSpec{
+					Rules: []apiv1.HTTPRouteRule{{
+						BackendRefs: []apiv1.HTTPBackendRef{{
+							BackendRef: apiv1.BackendRef{
+								BackendObjectReference: apiv1.BackendObjectReference{
+									Group: ptr.To(apiv1.Group(infextv1a2.GroupVersion.Group)),
+									Kind:  ptr.To(apiv1.Kind("InferencePool")),
+									Name:  "pool-disabled",
+								},
+							},
+						}},
+					}},
+				},
+			}
+			Expect(k8sClient.Create(ctx, httpRoute)).To(Succeed())
+
+			pool := &infextv1a2.InferencePool{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pool-disabled",
+					Namespace: defaultNamespace,
+				},
+				Spec: infextv1a2.InferencePoolSpec{
+					Selector:         map[infextv1a2.LabelKey]infextv1a2.LabelValue{},
+					TargetPortNumber: 1234,
+					EndpointPickerConfig: infextv1a2.EndpointPickerConfig{
+						ExtensionRef: &infextv1a2.Extension{
+							ExtensionReference: infextv1a2.ExtensionReference{Name: "doesnt-matter"},
+						},
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, pool)).To(Succeed())
+
+			expectedName := fmt.Sprintf("%s-endpoint-picker", pool.Name)
+			Consistently(func() error {
+				var dep appsv1.Deployment
+				return k8sClient.Get(ctx, client.ObjectKey{Namespace: defaultNamespace, Name: expectedName}, &dep)
+			}, "5s", "1s").ShouldNot(Succeed())
+		})
+	})
+})
