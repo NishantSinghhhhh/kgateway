@@ -455,6 +455,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: loadBalancer
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.LoadBalancer
+    - name: outlierDetection
+      type:
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.OutlierDetection
     - name: perConnectionBufferLimitBytes
       type:
         scalar: numeric
@@ -677,11 +680,9 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.Cookie
   map:
     fields:
-    - name: attributes
+    - name: httpOnly
       type:
-        map:
-          elementType:
-            scalar: string
+        scalar: boolean
     - name: name
       type:
         scalar: string
@@ -689,6 +690,12 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: path
       type:
         scalar: string
+    - name: sameSite
+      type:
+        scalar: string
+    - name: secure
+      type:
+        scalar: boolean
     - name: ttl
       type:
         namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Duration
@@ -1809,6 +1816,21 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: serviceName
       type:
         scalar: string
+- name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.OutlierDetection
+  map:
+    fields:
+    - name: baseEjectionTime
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Duration
+    - name: consecutive5xx
+      type:
+        scalar: numeric
+    - name: interval
+      type:
+        namedType: io.k8s.apimachinery.pkg.apis.meta.v1.Duration
+    - name: maxEjectionPercent
+      type:
+        scalar: numeric
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.Parameters
   map:
     fields:
@@ -1969,6 +1991,9 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.ProxyDeployment
   map:
     fields:
+    - name: omitReplicas
+      type:
+        scalar: boolean
     - name: replicas
       type:
         scalar: numeric
