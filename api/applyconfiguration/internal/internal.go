@@ -1186,12 +1186,18 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.HTTPListenerPolicySpec
   map:
     fields:
+    - name: acceptHttp10
+      type:
+        scalar: boolean
     - name: accessLog
       type:
         list:
           elementType:
             namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.AccessLog
           elementRelationship: atomic
+    - name: defaultHostForHttp10
+      type:
+        scalar: string
     - name: healthCheck
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.EnvoyHealthCheck
@@ -2186,6 +2192,9 @@ var schemaYAML = typed.YAMLObject(`types:
   map:
     fields:
     - name: clusterIP
+      type:
+        scalar: string
+    - name: externalTrafficPolicy
       type:
         scalar: string
     - name: extraAnnotations
