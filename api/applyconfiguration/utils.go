@@ -154,6 +154,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.HeaderApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("HeaderFilter"):
 		return &apiv1alpha1.HeaderFilterApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("HeaderModifiers"):
+		return &apiv1alpha1.HeaderModifiersApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("HeaderTransformation"):
 		return &apiv1alpha1.HeaderTransformationApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("HeaderValue"):
@@ -226,6 +228,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.ModerationApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("MultiPoolConfig"):
 		return &apiv1alpha1.MultiPoolConfigApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("NamespacedObjectReference"):
+		return &apiv1alpha1.NamespacedObjectReferenceApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("OpenAIConfig"):
 		return &apiv1alpha1.OpenAIConfigApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("OpenTelemetryAccessLogService"):
@@ -234,6 +238,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.OpenTelemetryTracingConfigApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("OTelTracesSampler"):
 		return &apiv1alpha1.OTelTracesSamplerApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("OutlierDetection"):
+		return &apiv1alpha1.OutlierDetectionApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Parameters"):
 		return &apiv1alpha1.ParametersApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PathOverride"):
@@ -264,6 +270,10 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.RateLimitPolicyApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("RateLimitProvider"):
 		return &apiv1alpha1.RateLimitProviderApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("RBAC"):
+		return &apiv1alpha1.RBACApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("RBACPolicy"):
+		return &apiv1alpha1.RBACPolicyApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Regex"):
 		return &apiv1alpha1.RegexApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("RegexMatch"):
