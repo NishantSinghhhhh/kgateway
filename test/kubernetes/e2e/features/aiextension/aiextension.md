@@ -47,7 +47,7 @@ export KIND_CLUSTER_NAME="kgateway-e2e"
 
 ### 3. Create the E2E Cluster
 
-This script spins up a **KIND** cluster configured with **MetalLB**, making it ready for the e2e tests.
+This script spins up a **KIND** cluster, builds the local images, and packages the local helm charts:
 
 ```
 KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME} ./hack/kind/setup-kind.sh
