@@ -110,7 +110,21 @@ func (tr *translationResult) MarshalJSON() ([]byte, error) {
 		}
 		result["Addresses"] = addresses
 	}
+	if len(tr.Backends) > 0 {
+		backends, err := marshalProtoMessages(tr.Backends, m)
+		if err != nil {
+			return nil, err
+		}
+		result["Backends"] = backends
+	}
 
+	if len(tr.Policies) > 0 {
+		policies, err := marshalProtoMessages(tr.Policies, m)
+		if err != nil {
+			return nil, err
+		}
+		result["Policies"] = policies
+	}
 	// Marshal the result map to JSON
 	return json.Marshal(result)
 }
@@ -503,7 +517,7 @@ func AreReportsSuccess(reportsMap reports.ReportMap) error {
 
 	for nns, gwReport := range reportsMap.Gateways {
 		for _, c := range gwReport.GetConditions() {
-			if c.Type == listener.AttachedListenerSetsConditionType {
+			if c.Type == listener.GatewayConditionAttachedListenerSets {
 				// A gateway might or might not have AttachedListenerSets so skip this condition
 				continue
 			}

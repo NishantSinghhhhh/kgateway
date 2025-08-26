@@ -948,6 +948,39 @@ func TestBasic(t *testing.T) {
 		})
 	})
 
+	t.Run("HTTPListenerPolicy with acceptHttp10", func(t *testing.T) {
+		test(t, translatorTestCase{
+			inputFile:  "httplistenerpolicy/accept-http10.yaml",
+			outputFile: "httplistenerpolicy/accept-http10.yaml",
+			gwNN: types.NamespacedName{
+				Namespace: "default",
+				Name:      "example-gateway",
+			},
+		})
+	})
+
+	t.Run("HTTPListenerPolicy with defaultHostForHttp10", func(t *testing.T) {
+		test(t, translatorTestCase{
+			inputFile:  "httplistenerpolicy/default-host-for-http10.yaml",
+			outputFile: "httplistenerpolicy/default-host-for-http10.yaml",
+			gwNN: types.NamespacedName{
+				Namespace: "default",
+				Name:      "example-gateway",
+			},
+		})
+	})
+
+	t.Run("HTTPListenerPolicy with defaultHostForHttp10 and no acceptHttp10", func(t *testing.T) {
+		test(t, translatorTestCase{
+			inputFile:  "httplistenerpolicy/default-host-for-http10-without-accept-http10.yaml",
+			outputFile: "httplistenerpolicy/default-host-for-http10-without-accept-http10.yaml",
+			gwNN: types.NamespacedName{
+				Namespace: "default",
+				Name:      "example-gateway",
+			},
+		})
+	})
+
 	t.Run("HTTPListenerPolicy merging", func(t *testing.T) {
 		test(t, translatorTestCase{
 			inputFile:  "httplistenerpolicy/merge.yaml",
@@ -1148,6 +1181,39 @@ func TestBasic(t *testing.T) {
 					{Group: "gateway.kgateway.dev", Kind: "TrafficPolicy", Namespace: "infra", Name: "test-policy"},
 				}
 				translatortest.AssertPolicyStatusWithGeneration(t, reportsMap, expectedPolicies, 42)
+			},
+		})
+	})
+
+	t.Run("RBAC Policy at route level", func(t *testing.T) {
+		test(t, translatorTestCase{
+			inputFile:  "rbac/route-cel-rbac.yaml",
+			outputFile: "rbac/route-cel-rbac.yaml",
+			gwNN: types.NamespacedName{
+				Namespace: "default",
+				Name:      "example-gateway",
+			},
+		})
+	})
+
+	t.Run("RBAC Policy at httproute level", func(t *testing.T) {
+		test(t, translatorTestCase{
+			inputFile:  "rbac/httproute-cel-rbac.yaml",
+			outputFile: "rbac/httproute-cel-rbac.yaml",
+			gwNN: types.NamespacedName{
+				Namespace: "default",
+				Name:      "example-gateway",
+			},
+		})
+	})
+
+	t.Run("RBAC Policy at gateway level", func(t *testing.T) {
+		test(t, translatorTestCase{
+			inputFile:  "rbac/gateway-cel-rbac.yaml",
+			outputFile: "rbac/gateway-cel-rbac.yaml",
+			gwNN: types.NamespacedName{
+				Namespace: "default",
+				Name:      "example-gateway",
 			},
 		})
 	})

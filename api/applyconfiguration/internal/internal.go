@@ -944,7 +944,6 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: extensionRef
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.NamespacedObjectReference
-      default: {}
     - name: withRequestBody
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.BufferSettings
@@ -972,7 +971,6 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: extensionRef
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.NamespacedObjectReference
-      default: {}
     - name: processingMode
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.ProcessingMode
@@ -1186,12 +1184,18 @@ var schemaYAML = typed.YAMLObject(`types:
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.HTTPListenerPolicySpec
   map:
     fields:
+    - name: acceptHttp10
+      type:
+        scalar: boolean
     - name: accessLog
       type:
         list:
           elementType:
             namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.AccessLog
           elementRelationship: atomic
+    - name: defaultHostForHttp10
+      type:
+        scalar: string
     - name: healthCheck
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.EnvoyHealthCheck
@@ -1997,6 +2001,25 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: replicas
       type:
         scalar: numeric
+- name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.RBAC
+  map:
+    fields:
+    - name: action
+      type:
+        scalar: string
+    - name: policy
+      type:
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.RBACPolicy
+      default: {}
+- name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.RBACPolicy
+  map:
+    fields:
+    - name: matchExpressions
+      type:
+        list:
+          elementType:
+            scalar: string
+          elementRelationship: atomic
 - name: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.RateLimit
   map:
     fields:
@@ -2186,6 +2209,9 @@ var schemaYAML = typed.YAMLObject(`types:
   map:
     fields:
     - name: clusterIP
+      type:
+        scalar: string
+    - name: externalTrafficPolicy
       type:
         scalar: string
     - name: extraAnnotations
@@ -2506,6 +2532,9 @@ var schemaYAML = typed.YAMLObject(`types:
     - name: rateLimit
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.RateLimit
+    - name: rbac
+      type:
+        namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.RBAC
     - name: retry
       type:
         namedType: com.github.kgateway-dev.kgateway.v2.api.v1alpha1.Retry
