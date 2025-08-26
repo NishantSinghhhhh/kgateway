@@ -22,7 +22,7 @@ import (
 
 func TestInferencePoolController(t *testing.T) {
 	ctx := context.Background()
-	
+
 	t.Run("when Inference Extension deployer is enabled", func(t *testing.T) {
 		t.Run("should reconcile an InferencePool referenced by a managed HTTPRoute and deploy the endpoint picker", func(t *testing.T) {
 			goroutineMonitor := assertions.NewGoRoutineMonitor()
@@ -139,7 +139,7 @@ func TestInferencePoolController(t *testing.T) {
 			// We expect the deployer to render and deploy an endpoint picker Deployment with name "pool1-endpoint-picker".
 			expectedName := fmt.Sprintf("%s-endpoint-picker", pool.Name)
 			var deploy appsv1.Deployment
-			
+
 			err = retryWithTimeout(10*time.Second, 1*time.Second, func() error {
 				return k8sClient.Get(ctx, client.ObjectKey{Namespace: defaultNamespace, Name: expectedName}, &deploy)
 			})
@@ -189,7 +189,7 @@ func TestInferencePoolController(t *testing.T) {
 
 			// Consistently check that no endpoint picker deployment is created.
 			expectedName := fmt.Sprintf("%s-endpoint-picker", pool.Name)
-			
+
 			// Check multiple times over 5 seconds that deployment is NOT created
 			for i := 0; i < 5; i++ {
 				var dep appsv1.Deployment
@@ -256,7 +256,7 @@ func TestInferencePoolController(t *testing.T) {
 			assert.NoError(t, err)
 
 			expectedName := fmt.Sprintf("%s-endpoint-picker", pool.Name)
-			
+
 			// Check multiple times over 5 seconds that deployment is NOT created
 			for i := 0; i < 5; i++ {
 				var dep appsv1.Deployment
