@@ -50,7 +50,7 @@ export KIND_CLUSTER_NAME="kgateway-e2e"
 This script spins up a **KIND** cluster configured with **MetalLB**, making it ready for the e2e tests.
 
 ```
-KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME} CONFORMANCE=true ./hack/kind/setup-kind.sh
+KIND_CLUSTER_NAME=${KIND_CLUSTER_NAME} ./hack/kind/setup-kind.sh
 ```
 
 -----
