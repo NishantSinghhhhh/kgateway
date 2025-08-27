@@ -11,8 +11,6 @@ Before you begin, ensure you have the following installed:
   - **python3** (3.11+) and **virtualenv**
   - **kubectl** and **kind**
   - **Docker**
-  - A local system that supports **MetalLB** for exposing Kubernetes services  
-    *(The cluster setup script relies on this to assign an external IP to the gateway.)*
 
 -----
 
