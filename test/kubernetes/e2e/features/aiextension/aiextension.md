@@ -8,7 +8,7 @@ The AI extension end-to-end (e2e) test uses **Python** to validate its functiona
 
 Before you begin, ensure you have the following installed:
 
-  - **python3** (3.11+) and **virtualenv**
+  - **python3** (3.11+) 
   - **kubectl** and **kind**
   - **Docker**
 
@@ -28,7 +28,6 @@ python3 -m venv .venv
 source .venv/bin/activate
 python3 -m ensurepip --upgrade
 python3 -m pip install -r test/kubernetes/e2e/features/aiextension/tests/requirements.txt
-export PYTHON=$(which python)
 ```
 
 -----
@@ -69,8 +68,6 @@ helm install kgateway-controller install/helm/kgateway --namespace ai-test
 ### 5. Deploy test resources
 
 ```
-kubectl create namespace ai-test || true
-
 kubectl apply -f test/kubernetes/e2e/features/aiextension/testdata/
 ```
 
