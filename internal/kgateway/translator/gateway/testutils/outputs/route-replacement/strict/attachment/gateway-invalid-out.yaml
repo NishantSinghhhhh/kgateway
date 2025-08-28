@@ -23,10 +23,6 @@ Listeners:
       typedConfig:
         '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
         httpFilters:
-        - disabled: true
-          name: transformation
-          typedConfig:
-            '@type': type.googleapis.com/envoy.api.v2.filter.http.FilterTransformations
         - name: envoy.filters.http.router
           typedConfig:
             '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -49,16 +45,12 @@ Listeners:
   filterChains:
   - filterChainMatch:
       serverNames:
-      - secure.example.com
+      - www.example.com
     filters:
     - name: envoy.filters.network.http_connection_manager
       typedConfig:
         '@type': type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
         httpFilters:
-        - disabled: true
-          name: transformation
-          typedConfig:
-            '@type': type.googleapis.com/envoy.api.v2.filter.http.FilterTransformations
         - name: envoy.filters.http.router
           typedConfig:
             '@type': type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -79,29 +71,15 @@ Listeners:
   name: listener~8443
 Routes:
 - ignorePortInHostMatching: true
-  metadata:
-    filterMetadata:
-      merge.TrafficPolicy.gateway.kgateway.dev:
-        transformation:
-        - gateway.kgateway.dev/TrafficPolicy/gwtest/listener-level-invalid-policy
   name: https
-  typedPerFilterConfig:
-    transformation:
-      '@type': type.googleapis.com/envoy.api.v2.filter.http.RouteTransformations
-      transformations:
-      - requestMatch:
-          requestTransformation:
-            transformationTemplate:
-              body:
-                text: '{{ invalid_template }'
   virtualHosts:
   - domains:
-    - secure.example.com
-    name: https~secure_example_com
+    - www.example.com
+    name: https~www_example_com
     routes:
     - match:
         prefix: /
-      name: https~secure_example_com-route-0-httproute-test-route-gwtest-0-0-matcher-0
+      name: https~www_example_com-route-0-httproute-test-route-gwtest-0-0-matcher-0
       route:
         cluster: kube_gwtest_example-svc_80
         clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
@@ -110,11 +88,6 @@ Routes:
   virtualHosts:
   - domains:
     - www.example.com
-    metadata:
-      filterMetadata:
-        merge.TrafficPolicy.gateway.kgateway.dev:
-          transformation:
-          - gateway.kgateway.dev/TrafficPolicy/gwtest/listener-level-invalid-policy
     name: listener~8080~www_example_com
     routes:
     - match:
@@ -123,12 +96,63 @@ Routes:
       route:
         cluster: kube_gwtest_example-svc_80
         clusterNotFoundResponseCode: INTERNAL_SERVER_ERROR
-    typedPerFilterConfig:
-      transformation:
-        '@type': type.googleapis.com/envoy.api.v2.filter.http.RouteTransformations
-        transformations:
-        - requestMatch:
-            requestTransformation:
-              transformationTemplate:
-                body:
-                  text: '{{ invalid_template }'
+Statuses:
+  gateways:
+    gwtest/example-gateway:
+      conditions:
+      - lastTransitionTime: null
+        message: ""
+        reason: ListenerSetsNotAllowed
+        status: Unknown
+        type: AttachedListenerSets
+      - lastTransitionTime: null
+        message: Gateway is accepted
+        reason: Accepted
+        status: "True"
+        type: Accepted
+      - lastTransitionTime: null
+        message: Gateway is programmed
+        reason: Programmed
+        status: "True"
+        type: Programmed
+  httpRoutes:
+    gwtest/test-route:
+      parents:
+      - conditions:
+        - lastTransitionTime: null
+          message: Route is accepted
+          reason: Accepted
+          status: "True"
+          type: Accepted
+        - lastTransitionTime: null
+          message: Route has valid refs
+          reason: ResolvedRefs
+          status: "True"
+          type: ResolvedRefs
+        controllerName: kgateway
+        parentRef:
+          group: ""
+          kind: ""
+          name: example-gateway
+  policies:
+    TrafficPolicy/gwtest/gateway-level-invalid-policy:
+      ancestors:
+      - ancestorRef:
+          group: gateway.networking.k8s.io
+          kind: Gateway
+          name: example-gateway
+          namespace: gwtest
+        conditions:
+        - lastTransitionTime: null
+          message: 'invalid xds configuration: error initializing configuration '''':
+            Failed to parse request template: Failed to parse body template [inja.exception.parser_error]
+            (at 1:21) unexpected ''}'''
+          reason: Invalid
+          status: "False"
+          type: Accepted
+        - lastTransitionTime: null
+          message: Attached to all targets
+          reason: Attached
+          status: "True"
+          type: Attached
+        controllerName: kgateway.dev/kgateway
