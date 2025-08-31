@@ -182,3 +182,427 @@ func (s *testingSuite) TestHTTPRouteWithInferencePool() {
 		})
 	}
 }
+
+func (s *testingSuite) TestHTTPRouteWithListenerSetParentRef() {
+	testName := "TestHTTPRouteWithListenerSetParentRef"
+
+	s.T().Cleanup(func() {
+		manifests, ok := s.manifests[testName]
+		if !ok {
+			s.FailNow("no manifests found for %s", testName)
+		}
+
+		for _, m := range manifests {
+			err := s.testInstallation.Actions.Kubectl().Delete(s.ctx, m)
+			s.NoError(err, "can delete manifest %s", m)
+		}
+	})
+
+	// Add the testdata manifests to the manifests map
+	s.manifests = map[string][][]byte{
+		testName: {
+			clientManifest,
+			vllmManifest,
+			gtwManifest,
+			listenersetManifest,
+			poolManifest,
+			eppManifest,
+			routeListenerSetManifest,
+		},
+	}
+
+	// Apply the testdata manifests
+	for _, m := range s.manifests[testName] {
+		err := s.testInstallation.Actions.Kubectl().Apply(s.ctx, m)
+		s.NoError(err, "can apply manifest %s", m)
+	}
+
+	// Assert test pods are running using key=pod_name and value=pod_namespace map.
+	for k, v := range map[string]string{
+		vllmDeployName:          testNS,
+		vllmDeployName + "-epp": testNS,
+		"curl":                  "curl"} {
+		s.testInstallation.Assertions.EventuallyPodsRunning(s.ctx, v, metav1.ListOptions{
+			LabelSelector: "app=" + k,
+		}, podRunTimeout)
+	}
+
+	// Assert gateway service and deployment are created
+	s.testInstallation.Assertions.EventuallyObjectsExist(s.ctx, gtwService, gtwDeployment)
+
+	// Assert gateway programmed condition
+	s.testInstallation.Assertions.EventuallyGatewayCondition(
+		s.ctx,
+		gtwObjectMeta.Name,
+		gtwObjectMeta.Namespace,
+		gwv1.GatewayConditionProgrammed,
+		metav1.ConditionTrue,
+		gtwProgramTimeout,
+	)
+
+	// Assert HTTPRoute conditions
+	conditions := []gwv1.RouteConditionType{gwv1.RouteConditionAccepted, gwv1.RouteConditionResolvedRefs}
+	for _, c := range conditions {
+		s.testInstallation.Assertions.EventuallyHTTPRouteCondition(
+			s.ctx,
+			"llm-route-listenerset",
+			testNS,
+			c,
+			metav1.ConditionTrue,
+		)
+	}
+
+	// Assert InferencePool conditions
+	s.testInstallation.Assertions.EventuallyInferencePoolCondition(
+		s.ctx,
+		vllmDeployName,
+		testNS,
+		inf.InferencePoolConditionAccepted,
+		metav1.ConditionTrue,
+	)
+
+	s.testInstallation.Assertions.EventuallyInferencePoolCondition(
+		s.ctx,
+		vllmDeployName,
+		testNS,
+		inf.InferencePoolConditionResolvedRefs,
+		metav1.ConditionTrue,
+	)
+
+	// Exercise OpenAI API endpoint test cases
+	type apiTest struct {
+		api              string
+		promptOrMessages string
+	}
+
+	tests := []apiTest{
+		// Call with a single "prompt" field
+		{
+			api:              "/v1/completions",
+			promptOrMessages: "Write as if you were a critic: San Francisco",
+		},
+		// Call with one user message
+		{
+			api:              "/v1/chat/completions",
+			promptOrMessages: `[{"role":"user","content":"Write as if you were a critic: San Francisco"}]`,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+		testName := fmt.Sprintf("CurlTestCase%d", i)
+
+		s.T().Run(testName, func(t *testing.T) {
+			// Build the "prompt" or "messages" fragment of the request body.
+			var fieldJSON string
+			if tc.api == "/v1/completions" {
+				fieldJSON = fmt.Sprintf(`"prompt":"%s"`, tc.promptOrMessages)
+			} else {
+				fieldJSON = fmt.Sprintf(`"messages":%s`, tc.promptOrMessages)
+			}
+
+			// Inject that field into the rest of the body template
+			body := fmt.Sprintf(
+				`{"model":"%s",%s,"max_tokens":100,"temperature":0}`,
+				targetModelName,
+				fieldJSON,
+			)
+
+			// Assert expected curl response
+			s.testInstallation.Assertions.AssertEventualCurlResponse(
+				s.ctx,
+				defaults.CurlPodExecOpt,
+				[]curl.Option{
+					curl.WithHost(kubeutils.ServiceFQDN(gtwService.ObjectMeta)),
+					curl.WithHeader("Content-Type", "application/json"),
+					curl.WithPath(tc.api),
+					curl.WithBody(body),
+				},
+				expectedVllmResp,
+			)
+		})
+	}
+}
+
+func (s *testingSuite) TestHTTPRouteWithXListenerSetParentRef() {
+	testName := "TestHTTPRouteWithXListenerSetParentRef"
+
+	s.T().Cleanup(func() {
+		manifests, ok := s.manifests[testName]
+		if !ok {
+			s.FailNow("no manifests found for %s", testName)
+		}
+
+		for _, m := range manifests {
+			err := s.testInstallation.Actions.Kubectl().Delete(s.ctx, m)
+			s.NoError(err, "can delete manifest %s", m)
+		}
+	})
+
+	// Add the testdata manifests to the manifests map
+	s.manifests = map[string][][]byte{
+		testName: {
+			clientManifest,
+			vllmManifest,
+			gtwManifest,
+			xlistenersetManifest,
+			poolManifest,
+			eppManifest,
+			routeXListenerSetManifest,
+		},
+	}
+
+	// Apply the testdata manifests
+	for _, m := range s.manifests[testName] {
+		err := s.testInstallation.Actions.Kubectl().Apply(s.ctx, m)
+		s.NoError(err, "can apply manifest %s", m)
+	}
+
+	// Assert test pods are running using key=pod_name and value=pod_namespace map.
+	for k, v := range map[string]string{
+		vllmDeployName:          testNS,
+		vllmDeployName + "-epp": testNS,
+		"curl":                  "curl"} {
+		s.testInstallation.Assertions.EventuallyPodsRunning(s.ctx, v, metav1.ListOptions{
+			LabelSelector: "app=" + k,
+		}, podRunTimeout)
+	}
+
+	// Assert gateway service and deployment are created
+	s.testInstallation.Assertions.EventuallyObjectsExist(s.ctx, gtwService, gtwDeployment)
+
+	// Assert gateway programmed condition
+	s.testInstallation.Assertions.EventuallyGatewayCondition(
+		s.ctx,
+		gtwObjectMeta.Name,
+		gtwObjectMeta.Namespace,
+		gwv1.GatewayConditionProgrammed,
+		metav1.ConditionTrue,
+		gtwProgramTimeout,
+	)
+
+	// Assert HTTPRoute conditions
+	conditions := []gwv1.RouteConditionType{gwv1.RouteConditionAccepted, gwv1.RouteConditionResolvedRefs}
+	for _, c := range conditions {
+		s.testInstallation.Assertions.EventuallyHTTPRouteCondition(
+			s.ctx,
+			"llm-route-xlistenerset",
+			testNS,
+			c,
+			metav1.ConditionTrue,
+		)
+	}
+
+	// Assert InferencePool conditions
+	s.testInstallation.Assertions.EventuallyInferencePoolCondition(
+		s.ctx,
+		vllmDeployName,
+		testNS,
+		inf.InferencePoolConditionAccepted,
+		metav1.ConditionTrue,
+	)
+
+	s.testInstallation.Assertions.EventuallyInferencePoolCondition(
+		s.ctx,
+		vllmDeployName,
+		testNS,
+		inf.InferencePoolConditionResolvedRefs,
+		metav1.ConditionTrue,
+	)
+
+	// Exercise OpenAI API endpoint test cases
+	type apiTest struct {
+		api              string
+		promptOrMessages string
+	}
+
+	tests := []apiTest{
+		// Call with a single "prompt" field
+		{
+			api:              "/v1/completions",
+			promptOrMessages: "Write as if you were a critic: San Francisco",
+		},
+		// Call with one user message
+		{
+			api:              "/v1/chat/completions",
+			promptOrMessages: `[{"role":"user","content":"Write as if you were a critic: San Francisco"}]`,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+		testName := fmt.Sprintf("CurlTestCase%d", i)
+
+		s.T().Run(testName, func(t *testing.T) {
+			// Build the "prompt" or "messages" fragment of the request body.
+			var fieldJSON string
+			if tc.api == "/v1/completions" {
+				fieldJSON = fmt.Sprintf(`"prompt":"%s"`, tc.promptOrMessages)
+			} else {
+				fieldJSON = fmt.Sprintf(`"messages":%s`, tc.promptOrMessages)
+			}
+
+			// Inject that field into the rest of the body template
+			body := fmt.Sprintf(
+				`{"model":"%s",%s,"max_tokens":100,"temperature":0}`,
+				targetModelName,
+				fieldJSON,
+			)
+
+			// Assert expected curl response
+			s.testInstallation.Assertions.AssertEventualCurlResponse(
+				s.ctx,
+				defaults.CurlPodExecOpt,
+				[]curl.Option{
+					curl.WithHost(kubeutils.ServiceFQDN(gtwService.ObjectMeta)),
+					curl.WithHeader("Content-Type", "application/json"),
+					curl.WithPath(tc.api),
+					curl.WithBody(body),
+				},
+				expectedVllmResp,
+			)
+		})
+	}
+}
+
+func (s *testingSuite) TestHTTPRouteWithMixedParentRefs() {
+	testName := "TestHTTPRouteWithMixedParentRefs"
+
+	s.T().Cleanup(func() {
+		manifests, ok := s.manifests[testName]
+		if !ok {
+			s.FailNow("no manifests found for %s", testName)
+		}
+
+		for _, m := range manifests {
+			err := s.testInstallation.Actions.Kubectl().Delete(s.ctx, m)
+			s.NoError(err, "can delete manifest %s", m)
+		}
+	})
+
+	// Add the testdata manifests to the manifests map
+	s.manifests = map[string][][]byte{
+		testName: {
+			clientManifest,
+			vllmManifest,
+			gtwManifest,
+			listenersetManifest,
+			xlistenersetManifest,
+			poolManifest,
+			eppManifest,
+			routeMixedParentsManifest,
+		},
+	}
+
+	// Apply the testdata manifests
+	for _, m := range s.manifests[testName] {
+		err := s.testInstallation.Actions.Kubectl().Apply(s.ctx, m)
+		s.NoError(err, "can apply manifest %s", m)
+	}
+
+	// Assert test pods are running using key=pod_name and value=pod_namespace map.
+	for k, v := range map[string]string{
+		vllmDeployName:          testNS,
+		vllmDeployName + "-epp": testNS,
+		"curl":                  "curl"} {
+		s.testInstallation.Assertions.EventuallyPodsRunning(s.ctx, v, metav1.ListOptions{
+			LabelSelector: "app=" + k,
+		}, podRunTimeout)
+	}
+
+	// Assert gateway service and deployment are created
+	s.testInstallation.Assertions.EventuallyObjectsExist(s.ctx, gtwService, gtwDeployment)
+
+	// Assert gateway programmed condition
+	s.testInstallation.Assertions.EventuallyGatewayCondition(
+		s.ctx,
+		gtwObjectMeta.Name,
+		gtwObjectMeta.Namespace,
+		gwv1.GatewayConditionProgrammed,
+		metav1.ConditionTrue,
+		gtwProgramTimeout,
+	)
+
+	// Assert HTTPRoute conditions
+	conditions := []gwv1.RouteConditionType{gwv1.RouteConditionAccepted, gwv1.RouteConditionResolvedRefs}
+	for _, c := range conditions {
+		s.testInstallation.Assertions.EventuallyHTTPRouteCondition(
+			s.ctx,
+			"llm-route-mixed-parents",
+			testNS,
+			c,
+			metav1.ConditionTrue,
+		)
+	}
+
+	// Assert InferencePool conditions
+	s.testInstallation.Assertions.EventuallyInferencePoolCondition(
+		s.ctx,
+		vllmDeployName,
+		testNS,
+		inf.InferencePoolConditionAccepted,
+		metav1.ConditionTrue,
+	)
+
+	s.testInstallation.Assertions.EventuallyInferencePoolCondition(
+		s.ctx,
+		vllmDeployName,
+		testNS,
+		inf.InferencePoolConditionResolvedRefs,
+		metav1.ConditionTrue,
+	)
+
+	// Exercise OpenAI API endpoint test cases
+	type apiTest struct {
+		api              string
+		promptOrMessages string
+	}
+
+	tests := []apiTest{
+		// Call with a single "prompt" field
+		{
+			api:              "/v1/completions",
+			promptOrMessages: "Write as if you were a critic: San Francisco",
+		},
+		// Call with one user message
+		{
+			api:              "/v1/chat/completions",
+			promptOrMessages: `[{"role":"user","content":"Write as if you were a critic: San Francisco"}]`,
+		},
+	}
+
+	for i := range tests {
+		tc := tests[i]
+		testName := fmt.Sprintf("CurlTestCase%d", i)
+
+		s.T().Run(testName, func(t *testing.T) {
+			// Build the "prompt" or "messages" fragment of the request body.
+			var fieldJSON string
+			if tc.api == "/v1/completions" {
+				fieldJSON = fmt.Sprintf(`"prompt":"%s"`, tc.promptOrMessages)
+			} else {
+				fieldJSON = fmt.Sprintf(`"messages":%s`, tc.promptOrMessages)
+			}
+
+			// Inject that field into the rest of the body template
+			body := fmt.Sprintf(
+				`{"model":"%s",%s,"max_tokens":100,"temperature":0}`,
+				targetModelName,
+				fieldJSON,
+			)
+
+			// Assert expected curl response
+			s.testInstallation.Assertions.AssertEventualCurlResponse(
+				s.ctx,
+				defaults.CurlPodExecOpt,
+				[]curl.Option{
+					curl.WithHost(kubeutils.ServiceFQDN(gtwService.ObjectMeta)),
+					curl.WithHeader("Content-Type", "application/json"),
+					curl.WithPath(tc.api),
+					curl.WithBody(body),
+				},
+				expectedVllmResp,
+			)
+		})
+	}
+}

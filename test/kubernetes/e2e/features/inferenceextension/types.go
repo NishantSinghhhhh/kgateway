@@ -44,6 +44,21 @@ var (
 	// clientManifest is the manifest for the curl client
 	//go:embed testdata/curl_pod.yaml
 	clientManifest []byte
+	// listenersetManifest is the manifest for the ListenerSet resource
+	//go:embed testdata/listenerset.yaml
+	listenersetManifest []byte
+	// xlistenersetManifest is the manifest for the XListenerSet resource
+	//go:embed testdata/xlistenerset.yaml
+	xlistenersetManifest []byte
+	// routeListenerSetManifest is the manifest for the HTTPRoute with ListenerSet parentRef
+	//go:embed testdata/route-listenerset.yaml
+	routeListenerSetManifest []byte
+	// routeXListenerSetManifest is the manifest for the HTTPRoute with XListenerSet parentRef
+	//go:embed testdata/route-xlistenerset.yaml
+	routeXListenerSetManifest []byte
+	// routeMixedParentsManifest is the manifest for the HTTPRoute with mixed parentRefs
+	//go:embed testdata/route-mixed-parents.yaml
+	routeMixedParentsManifest []byte
 
 	// The Gateway resources created by kgateway
 	gtwObjectMeta = metav1.ObjectMeta{

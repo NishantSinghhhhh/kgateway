@@ -17,6 +17,8 @@ import (
 	"k8s.io/client-go/util/retry"
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
+	// ADDED: Import for the XListenerSet API type
+	gwxv1a1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
@@ -224,7 +226,10 @@ func isPoolBackend(be gwv1.HTTPBackendRef, poolNN types.NamespacedName) bool {
 
 // referencedGateways returns all Gateways that are parents of any non-deleted
 // HTTPRoute still pointing at the given pool.
+// MODIFIED: Signature and logic updated to support ListenerSet.
 func referencedGateways(
+	ctx context.Context,
+	commonCol *common.CommonCollections,
 	routes []ir.HttpRouteIR, poolNN types.NamespacedName,
 ) map[types.NamespacedName]struct{} {
 	gws := make(map[types.NamespacedName]struct{})
@@ -252,19 +257,10 @@ func referencedGateways(
 			continue
 		}
 
-		// Collect every Gateway parentRef on that route
+		// Collect every Gateway-like parentRef on that route (Gateway or ListenerSet)
+		// by calling the new helper function.
 		for _, pr := range rt.Spec.ParentRefs {
-			if pr.Group != nil && *pr.Group != gwv1.GroupName {
-				continue
-			}
-			if pr.Kind != nil && string(*pr.Kind) != wellknown.GatewayKind {
-				continue
-			}
-			ns := rt.Namespace
-			if pr.Namespace != nil {
-				ns = string(*pr.Namespace)
-			}
-			gws[types.NamespacedName{Namespace: ns, Name: string(pr.Name)}] = struct{}{}
+			addGatewaysFromParentRef(ctx, commonCol, rt.Namespace, pr, gws)
 		}
 	}
 	return gws
@@ -335,7 +331,8 @@ func updatePoolStatus(
 	}
 
 	// Compute the authoritative set of Gateways that still reference the pool
-	activeGws := referencedGateways(routes, poolNN)
+	// MODIFIED: Pass context and commonCol to the updated function.
+	activeGws := referencedGateways(ctx, commonCol, routes, poolNN)
 
 	// Merge any Gateways supplied by the caller (may be nil/no-op)
 	for g := range parentGws {
@@ -414,6 +411,68 @@ func updatePoolStatus(
 		})
 	if retryErr != nil {
 		logger.Error("failed to update InferencePool status", "pool", poolNN, "err", retryErr)
+	}
+}
+
+// ADDED: This entire helper function is new.
+// addGatewaysFromParentRef resolves a ParentReference on an HTTPRoute into concrete Gateway
+// names and adds them to the provided set. It supports:
+// - Kind: Gateway (group gateway.networking.k8s.io)
+// - Kind: ListenerSet or XListenerSet (group gateway.networking.k8s.io or gateway.networking.x-k8s.io)
+func addGatewaysFromParentRef(
+	ctx context.Context,
+	commonCol *common.CommonCollections,
+	routeNamespace string,
+	pr gwv1.ParentReference,
+	dest map[types.NamespacedName]struct{},
+) {
+	// Determine kind
+	kind := wellknown.GatewayKind
+	if pr.Kind != nil && *pr.Kind != "" {
+		kind = string(*pr.Kind)
+	}
+
+	// Determine group
+	group := gwv1.GroupName
+	if pr.Group != nil && *pr.Group != "" {
+		group = string(*pr.Group)
+	}
+
+	// Determine namespace defaulting to the HTTPRoute's namespace
+	ns := routeNamespace
+	if pr.Namespace != nil && *pr.Namespace != "" {
+		ns = string(*pr.Namespace)
+	}
+
+	switch kind {
+	case wellknown.GatewayKind:
+		if group != gwv1.GroupName {
+			return
+		}
+		dest[types.NamespacedName{Namespace: ns, Name: string(pr.Name)}] = struct{}{}
+		return
+	case wellknown.ListenerSetKind, wellknown.XListenerSetKind:
+		// Support both stable "ListenerSet" and experimental "XListenerSet" kinds
+		if group != gwv1.GroupName && group != wellknown.XListenerSetGroup {
+			return
+		}
+		// Resolve the XListenerSet object to find its parent Gateway
+		lsNN := types.NamespacedName{Namespace: ns, Name: string(pr.Name)}
+		var ls gwxv1a1.XListenerSet
+		if err := commonCol.CrudClient.Get(ctx, lsNN, &ls); err != nil {
+			// If the LS cannot be fetched, skip silently to avoid blocking status updates
+			logger.Error("failed to get XListenerSet for ParentRef", "listenerset", lsNN, "err", err)
+			return
+		}
+		// Extract parent gateway from the ListenerSet spec
+		pns := ls.Namespace
+		if ls.Spec.ParentRef.Namespace != nil && *ls.Spec.ParentRef.Namespace != "" {
+			pns = string(*ls.Spec.ParentRef.Namespace)
+		}
+		dest[types.NamespacedName{Namespace: pns, Name: string(ls.Spec.ParentRef.Name)}] = struct{}{}
+		return
+	default:
+		return
 	}
 }
 
