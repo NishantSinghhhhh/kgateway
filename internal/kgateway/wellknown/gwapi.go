@@ -29,8 +29,8 @@ const (
 	BackendTLSPolicyKind = "BackendTLSPolicy"
 
 	// Kind string for ListenerSet resource
-    ListenerSetKind      = "ListenerSet"
-	
+	ListenerSetKind = "ListenerSet"
+
 	// Kind string for XListenerSet resource
 	XListenerSetKind = "XListenerSet"
 

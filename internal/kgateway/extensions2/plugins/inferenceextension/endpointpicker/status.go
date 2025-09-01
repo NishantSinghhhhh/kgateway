@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
+
 	// ADDED: Import for the XListenerSet API type
 	gwxv1a1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
