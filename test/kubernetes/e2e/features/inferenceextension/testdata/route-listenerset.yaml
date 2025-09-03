@@ -5,8 +5,8 @@ metadata:
   namespace: inf-ext-e2e
 spec:
   parentRefs:
-    - group: gateway.networking.k8s.io
-      kind: ListenerSet
+    - group: gateway.networking.x-k8s.io
+      kind: XListenerSet
       name: inference-listenerset
   rules:
     - backendRefs:
