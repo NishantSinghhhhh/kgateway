@@ -18,7 +18,6 @@ import (
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	// ADDED: Import for the XListenerSet API type
 	gwxv1a1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
@@ -227,7 +226,6 @@ func isPoolBackend(be gwv1.HTTPBackendRef, poolNN types.NamespacedName) bool {
 
 // referencedGateways returns all Gateways that are parents of any non-deleted
 // HTTPRoute still pointing at the given pool.
-// MODIFIED: Signature and logic updated to support ListenerSet.
 func referencedGateways(
 	ctx context.Context,
 	commonCol *common.CommonCollections,
@@ -332,7 +330,6 @@ func updatePoolStatus(
 	}
 
 	// Compute the authoritative set of Gateways that still reference the pool
-	// MODIFIED: Pass context and commonCol to the updated function.
 	activeGws := referencedGateways(ctx, commonCol, routes, poolNN)
 
 	// Merge any Gateways supplied by the caller (may be nil/no-op)
@@ -415,7 +412,7 @@ func updatePoolStatus(
 	}
 }
 
-// ADDED: This entire helper function is new.
+// This entire helper function is new.
 // addGatewaysFromParentRef resolves a ParentReference on an HTTPRoute into concrete Gateway
 // names and adds them to the provided set. It supports:
 // - Kind: Gateway (group gateway.networking.k8s.io)

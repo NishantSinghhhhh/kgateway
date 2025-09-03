@@ -21,7 +21,6 @@ import (
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	// ADDED: Import for ListenerSet types.
 	gwxv1a1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
 
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
@@ -37,7 +36,7 @@ func newFakeClient(t *testing.T, objs ...client.Object) client.Client {
 	require.NoError(t, corev1.AddToScheme(sch))
 	require.NoError(t, inf.AddToScheme(sch))
 	require.NoError(t, gwv1.Install(sch))
-	// ADDED: Register ListenerSet with the scheme for the fake client.
+	// Register ListenerSet with the scheme for the fake client.
 	require.NoError(t, gwxv1a1.Install(sch))
 
 	// Create a fake client with the provided objects
