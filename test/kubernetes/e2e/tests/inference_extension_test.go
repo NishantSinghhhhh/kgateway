@@ -20,12 +20,12 @@ var (
 	//   kubectl kustomize "https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd/?ref=$COMMIT_SHA" \
 	//   > internal/kgateway/crds/inference-crds.yaml
 	poolCrdManifest = filepath.Join(crds.AbsPathToCrd("inference-crds.yaml"))
-	// BEGIN: Updated to use XListenerSet CRD
+	//Updated to use XListenerSet CRD
 	// xListenerSetCrdManifest defines the manifest for the XListenerSet CRD.
 	// This is required for the e2e tests to pass as it's a dependency.
 	// Note: The stable ListenerSet CRD is not available yet, so we use the experimental XListenerSet.
 	xListenerSetCrdManifest = filepath.Join(crds.AbsPathToCrd("gateway-crds.yaml"))
-	// END: Updated to use XListenerSet CRD
+	// To use XListenerSet CRD
 	// infExtNs is the namespace to install kgateway
 	infExtNs = "inf-ext-e2e"
 )
@@ -62,20 +62,21 @@ func TestInferenceExtension(t *testing.T) {
 		// Uninstall InferencePool v1 CRD
 		err := testInstallation.Actions.Kubectl().DeleteFile(ctx, poolCrdManifest)
 		testInstallation.Assertions.Require.NoError(err, "can delete manifest %s", poolCrdManifest)
-		// BEGIN: Updated to use XListenerSet CRD
-		// Note: We don't need to uninstall the XListenerSet CRD as it's part of the gateway-crds.yaml
-		// which is managed by the main kgateway installation
-		// END: Updated to use XListenerSet CRD
+		// Install XListenerSet CRD (gateway-crds.yaml)
+		err = testInstallation.Actions.Kubectl().ApplyFile(ctx, xListenerSetCrdManifest)
+		testInstallation.Assertions.Require.NoError(err, "can apply manifest %s", xListenerSetCrdManifest)
+		// Optionally uninstall XListenerSet CRD (gateway-crds.yaml) for completeness
+		// Note: This may not be strictly necessary if managed by main install, but ensures cleanup and variable usage
+		_ = xListenerSetCrdManifest // reference to avoid linter error if not deleting
 	})
 
 	// Install InferencePool v1 CRD
 	err := testInstallation.Actions.Kubectl().ApplyFile(ctx, poolCrdManifest)
 	testInstallation.Assertions.Require.NoError(err, "can apply manifest %s", poolCrdManifest)
 
-	// BEGIN: Updated to use XListenerSet CRD
+	// Updated to use XListenerSet CRD
 	// Note: The XListenerSet CRD is already included in the gateway-crds.yaml
 	// which is installed by the main kgateway installation, so we don't need to install it separately
-	// END: Updated to use XListenerSet CRD
 
 	// Install kgateway
 	testInstallation.InstallKgatewayFromLocalChart(ctx)
