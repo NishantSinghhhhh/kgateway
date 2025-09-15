@@ -32,10 +32,15 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "kgateway.gateway.fullname" . }}
+      {{- if $gateway.podSecurityContext }}
+      securityContext:
+        {{- toYaml $gateway.podSecurityContext | nindent 8 }}
+      {{- else }}
       securityContext:
         sysctls:
           - name: net.ipv4.ip_unprivileged_port_start
             value: "0"
+      {{- end }}
       containers:
         - name: agent-gateway
           image: "{{ template "kgateway.gateway.image" $gateway.image }}"
@@ -89,6 +94,9 @@ spec:
             # Make /tmp writeable, needed for pprof
             - name: tmp
               mountPath: /tmp
+            {{- with $gateway.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
       volumes:
         - name: config-volume
           configMap:
@@ -99,6 +107,9 @@ spec:
             {{- end }}
         - name: tmp
           emptyDir: {}
+        {{- with $gateway.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       {{- with $gateway.affinity }}
       affinity:
       {{- toYaml . | nindent 8 }}
