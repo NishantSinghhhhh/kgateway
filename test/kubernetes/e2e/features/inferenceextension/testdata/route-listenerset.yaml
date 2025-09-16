@@ -9,13 +9,13 @@ spec:
       kind: XListenerSet
       name: inference-listenerset
   rules:
-    - backendRefs:
-        - group: inference.networking.k8s.io
-          kind: InferencePool
-          name: vllm-llama3-8b-instruct
-      matches:
+    - matches:
         - path:
             type: PathPrefix
             value: /
+      backendRefs:
+        - group: inference.networking.k8s.io
+          kind: InferencePool
+          name: vllm-llama3-8b-instruct
       timeouts:
         request: 300s

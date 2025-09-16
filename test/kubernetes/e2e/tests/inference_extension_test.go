@@ -20,9 +20,6 @@ var (
 	//   kubectl kustomize "https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd/?ref=$COMMIT_SHA" \
 	//   > internal/kgateway/crds/inference-crds.yaml
 	poolCrdManifest = filepath.Join(crds.AbsPathToCrd("inference-crds.yaml"))
-	// listenersetCrdManifest defines the manifest for the ListenerSet CRD.
-	// This is required for the e2e tests to pass as it's a dependency.
-	listenerSetCrdManifest = filepath.Join(crds.AbsPathToCrd("listenerset-crd.yaml"))
 	// infExtNs is the namespace to install kgateway
 	infExtNs = "inf-ext-e2e"
 )
@@ -59,17 +56,11 @@ func TestInferenceExtension(t *testing.T) {
 		// Uninstall InferencePool v1 CRD
 		err := testInstallation.Actions.Kubectl().DeleteFile(ctx, poolCrdManifest)
 		testInstallation.Assertions.Require.NoError(err, "can delete manifest %s", poolCrdManifest)
-		// Uninstall ListenerSet CRD
-		err = testInstallation.Actions.Kubectl().DeleteFile(ctx, listenerSetCrdManifest)
-		testInstallation.Assertions.Require.NoError(err, "can delete manifest %s", listenerSetCrdManifest)
 	})
 
 	// Install InferencePool v1 CRD
 	err := testInstallation.Actions.Kubectl().ApplyFile(ctx, poolCrdManifest)
 	testInstallation.Assertions.Require.NoError(err, "can apply manifest %s", poolCrdManifest)
-	// Install ListenerSet CRD required by tests
-	err = testInstallation.Actions.Kubectl().ApplyFile(ctx, listenerSetCrdManifest)
-	testInstallation.Assertions.Require.NoError(err, "can apply manifest %s", listenerSetCrdManifest)
 
 	// Install kgateway
 	testInstallation.InstallKgatewayFromLocalChart(ctx)

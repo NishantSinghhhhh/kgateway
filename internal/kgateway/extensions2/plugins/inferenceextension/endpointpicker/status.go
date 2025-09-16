@@ -256,7 +256,7 @@ func referencedGateways(
 			continue
 		}
 
-		// Collect every Gateway-like parentRef on that route (Gateway or ListenerSet)
+		// Collect every Gateway-like parentRef on that route (Gateway or XListenerSet)
 		// by calling the new helper function.
 		for _, pr := range rt.Spec.ParentRefs {
 			addGatewaysFromParentRef(ctx, commonCol, rt.Namespace, pr, gws)
@@ -415,7 +415,7 @@ func updatePoolStatus(
 // addGatewaysFromParentRef resolves a ParentReference on an HTTPRoute into concrete Gateway
 // names and adds them to the provided set. It supports:
 // - Kind: Gateway (group gateway.networking.k8s.io)
-// - Kind: ListenerSet or XListenerSet (group gateway.networking.k8s.io or gateway.networking.x-k8s.io)
+// - Kind: XListenerSet (group gateway.networking.x-k8s.io)
 func addGatewaysFromParentRef(
 	ctx context.Context,
 	commonCol *common.CommonCollections,
@@ -448,8 +448,8 @@ func addGatewaysFromParentRef(
 		}
 		dest[types.NamespacedName{Namespace: ns, Name: string(pr.Name)}] = struct{}{}
 		return
-	case wellknown.ListenerSetKind, wellknown.XListenerSetKind:
-		// Support both stable "ListenerSet" and experimental "XListenerSet" kinds
+	case wellknown.XListenerSetKind:
+		// Support experimental "XListenerSet" kind
 		if group != gwv1.GroupName && group != wellknown.XListenerSetGroup {
 			return
 		}
@@ -461,7 +461,7 @@ func addGatewaysFromParentRef(
 			logger.Error("failed to get XListenerSet for ParentRef", "listenerset", lsNN, "err", err)
 			return
 		}
-		// Extract parent gateway from the ListenerSet spec
+		// Extract parent gateway from the XListenerSet spec
 		pns := ls.Namespace
 		if ls.Spec.ParentRef.Namespace != nil && *ls.Spec.ParentRef.Namespace != "" {
 			pns = string(*ls.Spec.ParentRef.Namespace)

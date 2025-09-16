@@ -4,10 +4,6 @@ metadata:
   name: inference-listenerset
   namespace: inf-ext-e2e
 spec:
-  parentRef:
-    name: inference-gateway
-    kind: Gateway
-    group: gateway.networking.k8s.io
   listeners:
     - name: http
       port: 8080
