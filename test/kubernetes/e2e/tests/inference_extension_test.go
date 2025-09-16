@@ -20,12 +20,9 @@ var (
 	//   kubectl kustomize "https://github.com/kubernetes-sigs/gateway-api-inference-extension/config/crd/?ref=$COMMIT_SHA" \
 	//   > internal/kgateway/crds/inference-crds.yaml
 	poolCrdManifest = filepath.Join(crds.AbsPathToCrd("inference-crds.yaml"))
-	//Updated to use XListenerSet CRD
-	// xListenerSetCrdManifest defines the manifest for the XListenerSet CRD.
+	// listenersetCrdManifest defines the manifest for the ListenerSet CRD.
 	// This is required for the e2e tests to pass as it's a dependency.
-	// Note: The stable ListenerSet CRD is not available yet, so we use the experimental XListenerSet.
-	xListenerSetCrdManifest = filepath.Join(crds.AbsPathToCrd("gateway-crds.yaml"))
-	// To use XListenerSet CRD
+	listenerSetCrdManifest = filepath.Join(crds.AbsPathToCrd("listenerset-crd.yaml"))
 	// infExtNs is the namespace to install kgateway
 	infExtNs = "inf-ext-e2e"
 )
@@ -62,21 +59,17 @@ func TestInferenceExtension(t *testing.T) {
 		// Uninstall InferencePool v1 CRD
 		err := testInstallation.Actions.Kubectl().DeleteFile(ctx, poolCrdManifest)
 		testInstallation.Assertions.Require.NoError(err, "can delete manifest %s", poolCrdManifest)
-		// Install XListenerSet CRD (gateway-crds.yaml)
-		err = testInstallation.Actions.Kubectl().ApplyFile(ctx, xListenerSetCrdManifest)
-		testInstallation.Assertions.Require.NoError(err, "can apply manifest %s", xListenerSetCrdManifest)
-		// Optionally uninstall XListenerSet CRD (gateway-crds.yaml) for completeness
-		// Note: This may not be strictly necessary if managed by main install, but ensures cleanup and variable usage
-		_ = xListenerSetCrdManifest // reference to avoid linter error if not deleting
+		// Uninstall ListenerSet CRD
+		err = testInstallation.Actions.Kubectl().DeleteFile(ctx, listenerSetCrdManifest)
+		testInstallation.Assertions.Require.NoError(err, "can delete manifest %s", listenerSetCrdManifest)
 	})
 
 	// Install InferencePool v1 CRD
 	err := testInstallation.Actions.Kubectl().ApplyFile(ctx, poolCrdManifest)
 	testInstallation.Assertions.Require.NoError(err, "can apply manifest %s", poolCrdManifest)
-
-	// Updated to use XListenerSet CRD
-	// Note: The XListenerSet CRD is already included in the gateway-crds.yaml
-	// which is installed by the main kgateway installation, so we don't need to install it separately
+	// Install ListenerSet CRD required by tests
+	err = testInstallation.Actions.Kubectl().ApplyFile(ctx, listenerSetCrdManifest)
+	testInstallation.Assertions.Require.NoError(err, "can apply manifest %s", listenerSetCrdManifest)
 
 	// Install kgateway
 	testInstallation.InstallKgatewayFromLocalChart(ctx)

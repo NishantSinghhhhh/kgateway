@@ -412,7 +412,6 @@ func updatePoolStatus(
 	}
 }
 
-// This entire helper function is new.
 // addGatewaysFromParentRef resolves a ParentReference on an HTTPRoute into concrete Gateway
 // names and adds them to the provided set. It supports:
 // - Kind: Gateway (group gateway.networking.k8s.io)
