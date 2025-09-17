@@ -448,7 +448,7 @@ func addGatewaysFromParentRef(
 		}
 		dest[types.NamespacedName{Namespace: ns, Name: string(pr.Name)}] = struct{}{}
 		return
-	case wellknown.XListenerSetKind:
+	case wellknown.XListenerSetKind, wellknown.ListenerSetKind:
 		// Support experimental "XListenerSet" kind
 		if group != gwv1.GroupName && group != wellknown.XListenerSetGroup {
 			return
