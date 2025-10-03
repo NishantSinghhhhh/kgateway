@@ -625,7 +625,7 @@ func TestReferencedGateways(t *testing.T) {
 			},
 		},
 		{
-			name: "with ListenerSet parent",
+			name: "with complex mixed parentRefs (GW + xLS)",
 			routes: []ir.HttpRouteIR{
 				{
 					SourceObject: &gwv1.HTTPRoute{
@@ -633,52 +633,11 @@ func TestReferencedGateways(t *testing.T) {
 						Spec: gwv1.HTTPRouteSpec{
 							CommonRouteSpec: gwv1.CommonRouteSpec{
 								ParentRefs: []gwv1.ParentReference{
-									{
-										Group: ptr.To(gwv1.Group(gwv1.GroupName)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.ListenerSetKind)),
-										Name:  "ls-1",
-									},
-								},
-							},
-							Rules: []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
-						},
-					},
-				},
-			},
-			extraObjects: []client.Object{
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ls-1"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{
-							Name:      "parent-gw-from-ls",
-							Namespace: ptr.To(gwxv1a1.Namespace("other-ns")),
-						},
-					},
-				},
-			},
-			expected: map[types.NamespacedName]struct{}{
-				{Namespace: "other-ns", Name: "parent-gw-from-ls"}: {},
-			},
-		},
-		{
-			name: "with mixed GW, LS, and xLS parents",
-			routes: []ir.HttpRouteIR{
-				{
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{
-								ParentRefs: []gwv1.ParentReference{
-									{Name: "direct-gw"}, // Direct Gateway
-									{ // ListenerSet
-										Group: ptr.To(gwv1.Group(gwv1.GroupName)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.ListenerSetKind)),
-										Name:  "ls-2",
-									},
+									{Name: "direct-gateway"}, // Direct Gateway
 									{ // XListenerSet
 										Group: ptr.To(gwv1.Group(wellknown.XListenerSetGroup)),
 										Kind:  ptr.To(gwv1.Kind(wellknown.XListenerSetKind)),
-										Name:  "xls-2",
+										Name:  "complex-xls",
 									},
 								},
 							},
@@ -689,16 +648,18 @@ func TestReferencedGateways(t *testing.T) {
 			},
 			extraObjects: []client.Object{
 				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ls-2"},
+					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "complex-xls"},
 					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{Name: "parent-from-xls"},
+						ParentRef: gwxv1a1.ParentGatewayReference{
+							Name:      "xls-complex-parent",
+							Namespace: ptr.To(gwxv1a1.Namespace("complex-ns")),
+						},
 					},
 				},
 			},
 			expected: map[types.NamespacedName]struct{}{
-				{Namespace: ns, Name: "direct-gw"}:       {},
-				{Namespace: ns, Name: "parent-from-ls"}:  {},
-				{Namespace: ns, Name: "parent-from-xls"}: {},
+				{Namespace: ns, Name: "direct-gateway"}:               {},
+				{Namespace: "complex-ns", Name: "xls-complex-parent"}: {},
 			},
 		},
 		{
@@ -738,7 +699,7 @@ func TestReferencedGateways(t *testing.T) {
 			},
 		},
 		{
-			name: "with ListenerSet parent only",
+			name: "with mixed GW and xLS parents",
 			routes: []ir.HttpRouteIR{
 				{
 					SourceObject: &gwv1.HTTPRoute{
@@ -746,51 +707,11 @@ func TestReferencedGateways(t *testing.T) {
 						Spec: gwv1.HTTPRouteSpec{
 							CommonRouteSpec: gwv1.CommonRouteSpec{
 								ParentRefs: []gwv1.ParentReference{
-									{
-										Group: ptr.To(gwv1.Group(gwv1.GroupName)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.ListenerSetKind)),
-										Name:  "ls-only",
-									},
-								},
-							},
-							Rules: []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
-						},
-					},
-				},
-			},
-			extraObjects: []client.Object{
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ls-only"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{
-							Name: "ls-parent-gw",
-						},
-					},
-				},
-			},
-			expected: map[types.NamespacedName]struct{}{
-				{Namespace: ns, Name: "ls-parent-gw"}: {},
-			},
-		},
-		{
-			name: "with complex mixed parentRefs (GW + xLS + LS)",
-			routes: []ir.HttpRouteIR{
-				{
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{
-								ParentRefs: []gwv1.ParentReference{
-									{Name: "direct-gateway"}, // Direct Gateway
+									{Name: "direct-gw"}, // Direct Gateway
 									{ // XListenerSet
 										Group: ptr.To(gwv1.Group(wellknown.XListenerSetGroup)),
 										Kind:  ptr.To(gwv1.Kind(wellknown.XListenerSetKind)),
-										Name:  "complex-xls",
-									},
-									{ // ListenerSet
-										Group: ptr.To(gwv1.Group(gwv1.GroupName)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.ListenerSetKind)),
-										Name:  "complex-ls",
+										Name:  "xls-2",
 									},
 								},
 							},
@@ -801,27 +722,15 @@ func TestReferencedGateways(t *testing.T) {
 			},
 			extraObjects: []client.Object{
 				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "complex-xls"},
+					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "xls-2"},
 					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{
-							Name:      "xls-complex-parent",
-							Namespace: ptr.To(gwxv1a1.Namespace("complex-ns")),
-						},
-					},
-				},
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "complex-ls"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{
-							Name: "ls-complex-parent",
-						},
+						ParentRef: gwxv1a1.ParentGatewayReference{Name: "parent-from-xls"},
 					},
 				},
 			},
 			expected: map[types.NamespacedName]struct{}{
-				{Namespace: ns, Name: "direct-gateway"}:               {},
-				{Namespace: "complex-ns", Name: "xls-complex-parent"}: {},
-				{Namespace: ns, Name: "ls-complex-parent"}:            {},
+				{Namespace: ns, Name: "direct-gw"}:       {},
+				{Namespace: ns, Name: "parent-from-xls"}: {},
 			},
 		},
 	}

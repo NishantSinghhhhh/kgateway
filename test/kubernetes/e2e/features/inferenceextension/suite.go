@@ -1,6 +1,7 @@
 package inferenceextension
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/kubeutils"
 	"github.com/kgateway-dev/kgateway/v2/pkg/utils/requestutils/curl"
@@ -36,6 +38,29 @@ func NewTestingSuite(ctx context.Context, testInst *e2e.TestInstallation) suite.
 		testInstallation: testInst,
 		manifests:        map[string][][]byte{},
 	}
+}
+
+// injectNamespace injects namespace into manifests that need it
+func injectNamespace(manifest []byte, namespace string) []byte {
+	// Only inject namespace for XListenerSet manifests
+	if !bytes.Contains(manifest, []byte("kind: XListenerSet")) {
+		return manifest
+	}
+
+	var obj map[string]interface{}
+	if err := yaml.Unmarshal(manifest, &obj); err != nil {
+		return manifest // Return original on error
+	}
+
+	// Inject namespace into metadata
+	if metadata, ok := obj["metadata"].(map[string]interface{}); ok {
+		metadata["namespace"] = namespace
+		if modified, err := yaml.Marshal(obj); err == nil {
+			return modified
+		}
+	}
+
+	return manifest
 }
 
 func (s *testingSuite) TestHTTPRouteWithInferencePool() {
@@ -204,7 +229,7 @@ func (s *testingSuite) TestHTTPRouteWithListenerSetParentRef() {
 			clientManifest,
 			vllmManifest,
 			gtwManifest,
-			listenersetManifest,
+			injectNamespace(listenersetManifest, testNS),
 			poolManifest,
 			eppManifest,
 			routeListenerSetManifest,
@@ -345,7 +370,7 @@ func (s *testingSuite) TestHTTPRouteWithXListenerSetParentRef() {
 			clientManifest,
 			vllmManifest,
 			gtwManifest,
-			xlistenersetManifest,
+			injectNamespace(xlistenersetManifest, testNS),
 			poolManifest,
 			eppManifest,
 			routeXListenerSetManifest,
@@ -486,8 +511,8 @@ func (s *testingSuite) TestHTTPRouteWithMixedParentRefs() {
 			clientManifest,
 			vllmManifest,
 			gtwManifest,
-			listenersetManifest,
-			xlistenersetManifest,
+			injectNamespace(listenersetManifest, testNS),
+			injectNamespace(xlistenersetManifest, testNS),
 			poolManifest,
 			eppManifest,
 			routeMixedParentsManifest,

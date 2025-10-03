@@ -28,10 +28,7 @@ const (
 	ReferenceGrantKind   = "ReferenceGrant"
 	BackendTLSPolicyKind = "BackendTLSPolicy"
 
-	// Kind string for ListenerSet resource
-	ListenerSetKind = "ListenerSet"
-
-	// Kind string for XListenerSet resource
+	// Kind string for XListenerSet resource (experimental)
 	XListenerSetKind = "XListenerSet"
 
 	// Kind string for InferencePool resource

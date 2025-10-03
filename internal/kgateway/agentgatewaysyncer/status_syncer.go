@@ -157,7 +157,6 @@ func (s *AgentGwStatusSyncer) Start(ctx context.Context) error {
 	gatewayStatusLogger := logger.With("subcomponent", "gatewayStatusSyncer")
 	policyStatusLogger := logger.With("subcomponent", "policyStatusSyncer")
 
-	// Gateway status syncer
 	go func() {
 		for {
 			gatewayReports, err := s.gatewayReportQueue.Dequeue(ctx)
@@ -169,7 +168,6 @@ func (s *AgentGwStatusSyncer) Start(ctx context.Context) error {
 		}
 	}()
 
-	// Listener set status syncer
 	go func() {
 		for {
 			listenerSetReports, err := s.listenerSetReportQueue.Dequeue(ctx)
@@ -181,7 +179,6 @@ func (s *AgentGwStatusSyncer) Start(ctx context.Context) error {
 		}
 	}()
 
-	// Route status syncer
 	go func() {
 		for {
 			routeReports, err := s.routeReportQueue.Dequeue(ctx)
