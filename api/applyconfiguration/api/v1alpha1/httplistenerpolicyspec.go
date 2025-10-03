@@ -3,9 +3,8 @@
 package v1alpha1
 
 import (
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	apiv1alpha1 "github.com/kgateway-dev/kgateway/v2/api/v1alpha1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // HTTPListenerPolicySpecApplyConfiguration represents a declarative configuration of the HTTPListenerPolicySpec type for use
@@ -17,7 +16,7 @@ type HTTPListenerPolicySpecApplyConfiguration struct {
 	Tracing                    *TracingApplyConfiguration                     `json:"tracing,omitempty"`
 	UpgradeConfig              *UpgradeConfigApplyConfiguration               `json:"upgradeConfig,omitempty"`
 	UseRemoteAddress           *bool                                          `json:"useRemoteAddress,omitempty"`
-	XffNumTrustedHops          *uint32                                        `json:"xffNumTrustedHops,omitempty"`
+	XffNumTrustedHops          *int32                                         `json:"xffNumTrustedHops,omitempty"`
 	ServerHeaderTransformation *apiv1alpha1.ServerHeaderTransformation        `json:"serverHeaderTransformation,omitempty"`
 	StreamIdleTimeout          *v1.Duration                                   `json:"streamIdleTimeout,omitempty"`
 	IdleTimeout                *v1.Duration                                   `json:"idleTimeout,omitempty"`
@@ -99,7 +98,7 @@ func (b *HTTPListenerPolicySpecApplyConfiguration) WithUseRemoteAddress(value bo
 // WithXffNumTrustedHops sets the XffNumTrustedHops field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the XffNumTrustedHops field is set to the value of the last call.
-func (b *HTTPListenerPolicySpecApplyConfiguration) WithXffNumTrustedHops(value uint32) *HTTPListenerPolicySpecApplyConfiguration {
+func (b *HTTPListenerPolicySpecApplyConfiguration) WithXffNumTrustedHops(value int32) *HTTPListenerPolicySpecApplyConfiguration {
 	b.XffNumTrustedHops = &value
 	return b
 }

@@ -30,22 +30,20 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
+	apisettings "github.com/kgateway-dev/kgateway/v2/api/settings"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/controller"
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/setup"
 	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk"
-	"github.com/kgateway-dev/kgateway/v2/pkg/settings"
+	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/collections"
 	"github.com/kgateway-dev/kgateway/v2/pkg/validator"
 )
 
-var setupLogging = sync.Once{}
-
-type postStartFunc func(t *testing.T, ctx context.Context, client istiokube.CLIClient) func(ctx context.Context, commoncol *common.CommonCollections, mergeSettingsJSON string) []pluginsdk.Plugin
+type postStartFunc func(t *testing.T, ctx context.Context, client istiokube.CLIClient) func(ctx context.Context, commoncol *collections.CommonCollections, mergeSettingsJSON string) []pluginsdk.Plugin
 
 func RunController(
 	t *testing.T,
 	logger *zap.Logger,
-	globalSettings *settings.Settings,
+	globalSettings *apisettings.Settings,
 	testEnv *envtest.Environment,
 	postStart postStartFunc,
 	yamlFilesToApply [][]string,
@@ -58,18 +56,12 @@ func RunController(
 	),
 ) {
 	if globalSettings == nil {
-		st, err := settings.BuildSettings()
+		st, err := apisettings.BuildSettings()
 		if err != nil {
 			t.Fatalf("failed to get settings %v", err)
 		}
 		globalSettings = st
 	}
-	// Always set once instead of each time to avoid races
-	logLevel := globalSettings.LogLevel
-	globalSettings.LogLevel = ""
-	setupLogging.Do(func() {
-		setup.SetupLogging(logLevel)
-	})
 
 	// Enable this if you want api server logs and audit logs.
 	if os.Getenv("DEBUG_APISERVER") == "true" {
@@ -97,7 +89,7 @@ func RunController(
 	}
 	istiokube.EnableCrdWatcher(client)
 
-	var extraPlugins func(ctx context.Context, commoncol *common.CommonCollections, mergeSettingsJSON string) []pluginsdk.Plugin
+	var extraPlugins func(ctx context.Context, commoncol *collections.CommonCollections, mergeSettingsJSON string) []pluginsdk.Plugin
 	if postStart != nil {
 		extraPlugins = postStart(t, ctx, client)
 	}
@@ -128,6 +120,7 @@ func RunController(
 		setup.WithExtraPlugins(extraPlugins),
 		setup.WithKrtDebugger(krtDbg),
 		setup.WithXDSListener(l),
+		setup.WithAgwXDSListener(l),
 		setup.WithControllerManagerOptions(
 			func(ctx context.Context) *ctrl.Options {
 				return &ctrl.Options{
@@ -307,4 +300,14 @@ rules:
 		panic(err)
 	}
 	return f.Name()
+}
+
+func BuildSettings() (*apisettings.Settings, error) {
+	s, err := apisettings.BuildSettings()
+	if err != nil {
+		return nil, err
+	}
+	// xDS auth requires projected Service Account token which does not work in envtest
+	s.XdsAuth = false
+	return s, nil
 }

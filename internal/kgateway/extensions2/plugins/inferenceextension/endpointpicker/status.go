@@ -17,13 +17,12 @@ import (
 	"k8s.io/client-go/util/retry"
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
+	gwxv1a1 "sigs.k8s.io/gateway-api/apis/v1alpha1"
 
-	gwxv1a1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
-
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
+	"github.com/kgateway-dev/kgateway/v2/pkg/pluginsdk/collections"
 )
 
 const (
@@ -39,7 +38,7 @@ const (
 // Inference Extension plugin.
 func buildRegisterCallback(
 	ctx context.Context,
-	commonCol *common.CommonCollections,
+	commonCol *collections.CommonCollections,
 	bcol krt.Collection[ir.BackendObjectIR],
 	poolIdx krt.Index[string, ir.BackendObjectIR],
 	pods krt.Collection[krtcollections.LocalityPod],
@@ -54,7 +53,7 @@ func buildRegisterCallback(
 // registerPoolHandlers sets up handlers for InferencePool events that affect their status.
 func registerPoolHandlers(
 	ctx context.Context,
-	commonCol *common.CommonCollections,
+	commonCol *collections.CommonCollections,
 	bcol krt.Collection[ir.BackendObjectIR],
 ) {
 	// Watch add/update InferencePool events
@@ -73,7 +72,7 @@ func registerPoolHandlers(
 // registerRouteHandlers sets up handlers for HTTPRoute events that affect InferencePools.
 func registerRouteHandlers(
 	ctx context.Context,
-	commonCol *common.CommonCollections,
+	commonCol *collections.CommonCollections,
 	bcol krt.Collection[ir.BackendObjectIR],
 	poolIdx krt.Index[string, ir.BackendObjectIR],
 ) {
@@ -101,7 +100,7 @@ func registerRouteHandlers(
 // and updating their status based on the current state of the route and its parent Gateways.
 func reconcilePoolsForRoute(
 	ctx context.Context,
-	commonCol *common.CommonCollections,
+	commonCol *collections.CommonCollections,
 	bcol krt.Collection[ir.BackendObjectIR],
 	poolIdx krt.Index[string, ir.BackendObjectIR],
 	ev krt.Event[ir.HttpRouteIR],
@@ -124,7 +123,7 @@ func reconcilePoolsForRoute(
 	// Which gateways are parents of this route?
 	var parentGws map[types.NamespacedName]struct{}
 	if deletedUID == "" {
-		parentGws = parentGateways(hrt)
+		parentGws = parentGateways(ctx, commonCol, hrt)
 	}
 
 	// Pools referenced by this route
@@ -158,7 +157,7 @@ func reconcilePoolsForRoute(
 // registerServiceHandlers sets up handlers for Service events that may affect InferencePools.
 func registerServiceHandlers(
 	ctx context.Context,
-	commonCol *common.CommonCollections,
+	commonCol *collections.CommonCollections,
 	bcol krt.Collection[ir.BackendObjectIR],
 ) {
 	// Watch Service events and trigger reconciliation for referent InferencePools.
@@ -170,7 +169,7 @@ func registerServiceHandlers(
 // reconcilePoolsForService validates all InferencePools that reference the given Service.
 func reconcilePoolsForService(
 	ctx context.Context,
-	commonCol *common.CommonCollections,
+	commonCol *collections.CommonCollections,
 	bcol krt.Collection[ir.BackendObjectIR],
 	ev krt.Event[*corev1.Service],
 ) {
@@ -228,8 +227,9 @@ func isPoolBackend(be gwv1.HTTPBackendRef, poolNN types.NamespacedName) bool {
 // HTTPRoute still pointing at the given pool.
 func referencedGateways(
 	ctx context.Context,
-	commonCol *common.CommonCollections,
-	routes []ir.HttpRouteIR, poolNN types.NamespacedName,
+	commonCol *collections.CommonCollections,
+	routes []ir.HttpRouteIR,
+	poolNN types.NamespacedName,
 ) map[types.NamespacedName]struct{} {
 	gws := make(map[types.NamespacedName]struct{})
 
@@ -266,22 +266,77 @@ func referencedGateways(
 }
 
 // parentGateways returns a map of all parent Gateways referenced by the given HTTPRoute.
-func parentGateways(rt *gwv1.HTTPRoute) map[types.NamespacedName]struct{} {
+func parentGateways(
+	ctx context.Context,
+	commonCol *collections.CommonCollections,
+	rt *gwv1.HTTPRoute,
+) map[types.NamespacedName]struct{} {
 	gws := make(map[types.NamespacedName]struct{})
 	for _, pr := range rt.Spec.ParentRefs {
-		if pr.Group != nil && *pr.Group != gwv1.GroupName {
-			continue
-		}
-		if pr.Kind != nil && string(*pr.Kind) != wellknown.GatewayKind {
-			continue
-		}
-		ns := rt.Namespace
-		if pr.Namespace != nil {
-			ns = string(*pr.Namespace)
-		}
-		gws[types.NamespacedName{Namespace: ns, Name: string(pr.Name)}] = struct{}{}
+		addGatewaysFromParentRef(ctx, commonCol, rt.Namespace, pr, gws)
 	}
 	return gws
+}
+
+// addGatewaysFromParentRef resolves a ParentReference on an HTTPRoute into concrete Gateway
+// names and adds them to the provided set. It supports:
+// - Kind: Gateway (group gateway.networking.k8s.io)
+// - Kind: XListenerSet (group gateway.networking.x-k8s.io)
+func addGatewaysFromParentRef(
+	ctx context.Context,
+	commonCol *collections.CommonCollections,
+	routeNamespace string,
+	pr gwv1.ParentReference,
+	dest map[types.NamespacedName]struct{},
+) {
+	// Determine kind
+	kind := wellknown.GatewayKind
+	if pr.Kind != nil && *pr.Kind != "" {
+		kind = string(*pr.Kind)
+	}
+
+	// Determine group
+	group := gwv1.GroupName
+	if pr.Group != nil && *pr.Group != "" {
+		group = string(*pr.Group)
+	}
+
+	// Determine namespace defaulting to the HTTPRoute's namespace
+	ns := routeNamespace
+	if pr.Namespace != nil && *pr.Namespace != "" {
+		ns = string(*pr.Namespace)
+	}
+
+	switch kind {
+	case wellknown.GatewayKind:
+		if group != gwv1.GroupName {
+			return
+		}
+		dest[types.NamespacedName{Namespace: ns, Name: string(pr.Name)}] = struct{}{}
+		return
+	case wellknown.XListenerSetKind, wellknown.ListenerSetKind:
+		// Support experimental "XListenerSet" kind
+		if group != gwv1.GroupName && group != wellknown.XListenerSetGroup {
+			return
+		}
+		// Resolve the XListenerSet object to find its parent Gateway
+		lsNN := types.NamespacedName{Namespace: ns, Name: string(pr.Name)}
+		var ls gwxv1a1.XListenerSet
+		if err := commonCol.CrudClient.Get(ctx, lsNN, &ls); err != nil {
+			// If the LS cannot be fetched, skip silently to avoid blocking status updates
+			logger.Error("failed to get XListenerSet for ParentRef", "listenerset", lsNN, "err", err)
+			return
+		}
+		// Extract parent gateway from the XListenerSet spec
+		pns := ls.Namespace
+		if ls.Spec.ParentRef.Namespace != nil && *ls.Spec.ParentRef.Namespace != "" {
+			pns = string(*ls.Spec.ParentRef.Namespace)
+		}
+		dest[types.NamespacedName{Namespace: pns, Name: string(ls.Spec.ParentRef.Name)}] = struct{}{}
+		return
+	default:
+		return
+	}
 }
 
 // upsertCondition merges c into conds and returns true if that changed the conditions
@@ -294,7 +349,7 @@ func upsert(conds *[]metav1.Condition, c metav1.Condition) {
 // means the HTTPRoute with this UID no longer exists.
 func updatePoolStatus(
 	ctx context.Context,
-	commonCol *common.CommonCollections,
+	commonCol *collections.CommonCollections,
 	beIR ir.BackendObjectIR,
 	deletedUID types.UID,
 	parentGws map[types.NamespacedName]struct{},
@@ -412,67 +467,6 @@ func updatePoolStatus(
 	}
 }
 
-// addGatewaysFromParentRef resolves a ParentReference on an HTTPRoute into concrete Gateway
-// names and adds them to the provided set. It supports:
-// - Kind: Gateway (group gateway.networking.k8s.io)
-// - Kind: XListenerSet (group gateway.networking.x-k8s.io)
-func addGatewaysFromParentRef(
-	ctx context.Context,
-	commonCol *common.CommonCollections,
-	routeNamespace string,
-	pr gwv1.ParentReference,
-	dest map[types.NamespacedName]struct{},
-) {
-	// Determine kind
-	kind := wellknown.GatewayKind
-	if pr.Kind != nil && *pr.Kind != "" {
-		kind = string(*pr.Kind)
-	}
-
-	// Determine group
-	group := gwv1.GroupName
-	if pr.Group != nil && *pr.Group != "" {
-		group = string(*pr.Group)
-	}
-
-	// Determine namespace defaulting to the HTTPRoute's namespace
-	ns := routeNamespace
-	if pr.Namespace != nil && *pr.Namespace != "" {
-		ns = string(*pr.Namespace)
-	}
-
-	switch kind {
-	case wellknown.GatewayKind:
-		if group != gwv1.GroupName {
-			return
-		}
-		dest[types.NamespacedName{Namespace: ns, Name: string(pr.Name)}] = struct{}{}
-		return
-	case wellknown.XListenerSetKind, wellknown.ListenerSetKind:
-		// Support experimental "XListenerSet" kind
-		if group != gwv1.GroupName && group != wellknown.XListenerSetGroup {
-			return
-		}
-		// Resolve the XListenerSet object to find its parent Gateway
-		lsNN := types.NamespacedName{Namespace: ns, Name: string(pr.Name)}
-		var ls gwxv1a1.XListenerSet
-		if err := commonCol.CrudClient.Get(ctx, lsNN, &ls); err != nil {
-			// If the LS cannot be fetched, skip silently to avoid blocking status updates
-			logger.Error("failed to get XListenerSet for ParentRef", "listenerset", lsNN, "err", err)
-			return
-		}
-		// Extract parent gateway from the XListenerSet spec
-		pns := ls.Namespace
-		if ls.Spec.ParentRef.Namespace != nil && *ls.Spec.ParentRef.Namespace != "" {
-			pns = string(*ls.Spec.ParentRef.Namespace)
-		}
-		dest[types.NamespacedName{Namespace: pns, Name: string(ls.Spec.ParentRef.Name)}] = struct{}{}
-		return
-	default:
-		return
-	}
-}
-
 // key returns a stable identity string for a Gateway-like ParentReference.
 func key(ref inf.ParentReference) string {
 	group := inferencePoolGVK.Group
@@ -509,7 +503,7 @@ func conditionsEqual(a, b []metav1.Condition) bool {
 }
 
 // parentsEqual returns true only when both the *set of parents* and every
-// parent’s *Conditions* are identical.
+// parent's *Conditions* are identical.
 func parentsEqual(a, b []inf.ParentStatus) bool {
 	if len(a) != len(b) {
 		return false
