@@ -699,7 +699,7 @@ func TestReferencedGateways(t *testing.T) {
 			},
 		},
 		{
-			name: "with mixed GW and xLS parents",
+			name: "with mixed GW and xLS parents", // Updated name since we removed ListenerSet
 			routes: []ir.HttpRouteIR{
 				{
 					SourceObject: &gwv1.HTTPRoute{
