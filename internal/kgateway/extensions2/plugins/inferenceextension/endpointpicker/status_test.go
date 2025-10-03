@@ -21,9 +21,6 @@ import (
 	inf "sigs.k8s.io/gateway-api-inference-extension/api/v1"
 	gwv1 "sigs.k8s.io/gateway-api/apis/v1"
 
-	gwxv1a1 "sigs.k8s.io/gateway-api/apisx/v1alpha1"
-
-	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/extensions2/common"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/ir"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/krtcollections"
 	"github.com/kgateway-dev/kgateway/v2/internal/kgateway/wellknown"
@@ -37,8 +34,6 @@ func newFakeClient(t *testing.T, objs ...client.Object) client.Client {
 	require.NoError(t, corev1.AddToScheme(sch))
 	require.NoError(t, inf.Install(sch))
 	require.NoError(t, gwv1.Install(sch))
-	// Register ListenerSet with the scheme for the fake client.
-	require.NoError(t, gwxv1a1.Install(sch))
 
 	// Create a fake client with the provided objects
 	b := fakeclient.NewClientBuilder().WithScheme(sch)
@@ -505,346 +500,125 @@ func TestUpdatePoolStatus_WithExtraGws(t *testing.T) {
 	}, updated.Status.Parents[0].ParentRef)
 }
 
-// REPLACED: This test is now table-driven and includes ListenerSet cases to fix the compiler error.
 func TestReferencedGateways(t *testing.T) {
+	// Set up the test with a namespace, pool name, and two gateways in different namespaces
 	ns := "default"
 	poolNN := types.NamespacedName{Namespace: ns, Name: "my-pool"}
+	gw1 := types.NamespacedName{Namespace: ns, Name: "gw1"}
+	gw2 := types.NamespacedName{Namespace: "other", Name: "gw2"}
 
-	// Common backend ref for all routes
-	backendRef := gwv1.HTTPBackendRef{
-		BackendRef: gwv1.BackendRef{
-			BackendObjectReference: gwv1.BackendObjectReference{
-				Group: ptr.To(gwv1.Group(inf.GroupVersion.Group)),
-				Kind:  ptr.To(gwv1.Kind(wellknown.InferencePoolKind)),
-				Name:  gwv1.ObjectName(poolNN.Name),
+	// Create two gateways with different namespaces
+	route1 := ir.HttpRouteIR{
+		SourceObject: &gwv1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: ns,
+			},
+			Spec: gwv1.HTTPRouteSpec{
+				CommonRouteSpec: gwv1.CommonRouteSpec{
+					ParentRefs: []gwv1.ParentReference{
+						{
+							Group: ptr.To(gwv1.Group(gwv1.GroupName)),
+							Kind:  ptr.To(gwv1.Kind(wellknown.GatewayKind)),
+							Name:  gwv1.ObjectName(gw1.Name),
+						},
+						{
+							Group:     ptr.To(gwv1.Group(gwv1.GroupName)),
+							Kind:      ptr.To(gwv1.Kind(wellknown.GatewayKind)),
+							Namespace: ptr.To(gwv1.Namespace(gw2.Namespace)),
+							Name:      gwv1.ObjectName(gw2.Name),
+						},
+					},
+				},
+				Rules: []gwv1.HTTPRouteRule{
+					{
+						BackendRefs: []gwv1.HTTPBackendRef{
+							{
+								BackendRef: gwv1.BackendRef{
+									BackendObjectReference: gwv1.BackendObjectReference{
+										Group: ptr.To(gwv1.Group(inf.GroupVersion.Group)),
+										Kind:  ptr.To(gwv1.Kind(wellknown.InferencePoolKind)),
+										Name:  gwv1.ObjectName(poolNN.Name),
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 	}
-
-	// Test cases
-	tests := []struct {
-		name         string
-		routes       []ir.HttpRouteIR
-		extraObjects []client.Object
-		expected     map[types.NamespacedName]struct{}
-	}{
-		{
-			name:     "no routes",
-			expected: map[types.NamespacedName]struct{}{},
-		},
-		{
-			name: "with standard gateway parent refs",
-			routes: []ir.HttpRouteIR{
-				{
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{
-								ParentRefs: []gwv1.ParentReference{
-									{Name: "gw1"}, // Same namespace
-									{Name: "gw2", Namespace: ptr.To(gwv1.Namespace("other"))},
-								},
-							},
-							Rules: []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
+	route2 := ir.HttpRouteIR{
+		SourceObject: &gwv1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace:         ns,
+				DeletionTimestamp: ptr.To(metav1.Now()),
+			},
+			Spec: gwv1.HTTPRouteSpec{
+				CommonRouteSpec: gwv1.CommonRouteSpec{
+					ParentRefs: []gwv1.ParentReference{
+						{
+							Group: ptr.To(gwv1.Group(gwv1.GroupName)),
+							Kind:  ptr.To(gwv1.Kind(wellknown.GatewayKind)),
+							Name:  gwv1.ObjectName("deleted-gw"),
 						},
 					},
 				},
-			},
-			expected: map[types.NamespacedName]struct{}{
-				{Namespace: ns, Name: "gw1"}:      {},
-				{Namespace: "other", Name: "gw2"}: {},
-			},
-		},
-		{
-			name: "ignores deleted routes and routes for other backends",
-			routes: []ir.HttpRouteIR{
-				{ // This route should be processed
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{ParentRefs: []gwv1.ParentReference{{Name: "gw1"}}},
-							Rules:           []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
-						},
-					},
-				},
-				{ // This route is being deleted
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns, DeletionTimestamp: ptr.To(metav1.Now())},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{ParentRefs: []gwv1.ParentReference{{Name: "deleted-gw"}}},
-							Rules:           []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
-						},
-					},
-				},
-				{ // This route points to a different backend
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{ParentRefs: []gwv1.ParentReference{{Name: "unrelated-gw"}}},
-							Rules: []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{
-								{BackendRef: gwv1.BackendRef{BackendObjectReference: gwv1.BackendObjectReference{Name: "some-other-service"}}},
-							}}},
-						},
-					},
-				},
-			},
-			expected: map[types.NamespacedName]struct{}{
-				{Namespace: ns, Name: "gw1"}: {},
-			},
-		},
-		{
-			name: "with XListenerSet parent",
-			routes: []ir.HttpRouteIR{
-				{
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{
-								ParentRefs: []gwv1.ParentReference{
-									{
-										Group: ptr.To(gwv1.Group(wellknown.XListenerSetGroup)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.XListenerSetKind)),
-										Name:  "xls-1",
+				Rules: []gwv1.HTTPRouteRule{
+					{
+						BackendRefs: []gwv1.HTTPBackendRef{
+							{
+								BackendRef: gwv1.BackendRef{
+									BackendObjectReference: gwv1.BackendObjectReference{
+										Group: ptr.To(gwv1.Group(inf.GroupVersion.Group)),
+										Kind:  ptr.To(gwv1.Kind(wellknown.InferencePoolKind)),
+										Name:  gwv1.ObjectName(poolNN.Name),
 									},
 								},
 							},
-							Rules: []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
 						},
 					},
 				},
-			},
-			extraObjects: []client.Object{
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "xls-1"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{
-							Name: "parent-gw-from-xls",
-						},
-					},
-				},
-			},
-			expected: map[types.NamespacedName]struct{}{
-				{Namespace: ns, Name: "parent-gw-from-xls"}: {},
-			},
-		},
-		{
-			name: "with ListenerSet parent",
-			routes: []ir.HttpRouteIR{
-				{
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{
-								ParentRefs: []gwv1.ParentReference{
-									{
-										Group: ptr.To(gwv1.Group(gwv1.GroupName)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.ListenerSetKind)),
-										Name:  "ls-1",
-									},
-								},
-							},
-							Rules: []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
-						},
-					},
-				},
-			},
-			extraObjects: []client.Object{
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ls-1"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{
-							Name:      "parent-gw-from-ls",
-							Namespace: ptr.To(gwxv1a1.Namespace("other-ns")),
-						},
-					},
-				},
-			},
-			expected: map[types.NamespacedName]struct{}{
-				{Namespace: "other-ns", Name: "parent-gw-from-ls"}: {},
-			},
-		},
-		{
-			name: "with mixed GW, LS, and xLS parents",
-			routes: []ir.HttpRouteIR{
-				{
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{
-								ParentRefs: []gwv1.ParentReference{
-									{Name: "direct-gw"}, // Direct Gateway
-									{ // ListenerSet
-										Group: ptr.To(gwv1.Group(gwv1.GroupName)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.ListenerSetKind)),
-										Name:  "ls-2",
-									},
-									{ // XListenerSet
-										Group: ptr.To(gwv1.Group(wellknown.XListenerSetGroup)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.XListenerSetKind)),
-										Name:  "xls-2",
-									},
-								},
-							},
-							Rules: []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
-						},
-					},
-				},
-			},
-			extraObjects: []client.Object{
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ls-2"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{Name: "parent-from-ls"},
-					},
-				},
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "xls-2"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{Name: "parent-from-xls"},
-					},
-				},
-			},
-			expected: map[types.NamespacedName]struct{}{
-				{Namespace: ns, Name: "direct-gw"}:       {},
-				{Namespace: ns, Name: "parent-from-ls"}:  {},
-				{Namespace: ns, Name: "parent-from-xls"}: {},
-			},
-		},
-		{
-			name: "with XListenerSet parent only",
-			routes: []ir.HttpRouteIR{
-				{
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{
-								ParentRefs: []gwv1.ParentReference{
-									{
-										Group: ptr.To(gwv1.Group(wellknown.XListenerSetGroup)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.XListenerSetKind)),
-										Name:  "xls-only",
-									},
-								},
-							},
-							Rules: []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
-						},
-					},
-				},
-			},
-			extraObjects: []client.Object{
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "xls-only"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{
-							Name:      "xls-parent-gw",
-							Namespace: ptr.To(gwxv1a1.Namespace("xls-gw-ns")),
-						},
-					},
-				},
-			},
-			expected: map[types.NamespacedName]struct{}{
-				{Namespace: "xls-gw-ns", Name: "xls-parent-gw"}: {},
-			},
-		},
-		{
-			name: "with ListenerSet parent only",
-			routes: []ir.HttpRouteIR{
-				{
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{
-								ParentRefs: []gwv1.ParentReference{
-									{
-										Group: ptr.To(gwv1.Group(gwv1.GroupName)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.ListenerSetKind)),
-										Name:  "ls-only",
-									},
-								},
-							},
-							Rules: []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
-						},
-					},
-				},
-			},
-			extraObjects: []client.Object{
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "ls-only"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{
-							Name: "ls-parent-gw",
-						},
-					},
-				},
-			},
-			expected: map[types.NamespacedName]struct{}{
-				{Namespace: ns, Name: "ls-parent-gw"}: {},
-			},
-		},
-		{
-			name: "with complex mixed parentRefs (GW + xLS + LS)",
-			routes: []ir.HttpRouteIR{
-				{
-					SourceObject: &gwv1.HTTPRoute{
-						ObjectMeta: metav1.ObjectMeta{Namespace: ns},
-						Spec: gwv1.HTTPRouteSpec{
-							CommonRouteSpec: gwv1.CommonRouteSpec{
-								ParentRefs: []gwv1.ParentReference{
-									{Name: "direct-gateway"}, // Direct Gateway
-									{ // XListenerSet
-										Group: ptr.To(gwv1.Group(wellknown.XListenerSetGroup)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.XListenerSetKind)),
-										Name:  "complex-xls",
-									},
-									{ // ListenerSet
-										Group: ptr.To(gwv1.Group(gwv1.GroupName)),
-										Kind:  ptr.To(gwv1.Kind(wellknown.ListenerSetKind)),
-										Name:  "complex-ls",
-									},
-								},
-							},
-							Rules: []gwv1.HTTPRouteRule{{BackendRefs: []gwv1.HTTPBackendRef{backendRef}}},
-						},
-					},
-				},
-			},
-			extraObjects: []client.Object{
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "complex-xls"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{
-							Name:      "xls-complex-parent",
-							Namespace: ptr.To(gwxv1a1.Namespace("complex-ns")),
-						},
-					},
-				},
-				&gwxv1a1.XListenerSet{
-					ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "complex-ls"},
-					Spec: gwxv1a1.ListenerSetSpec{
-						ParentRef: gwxv1a1.ParentGatewayReference{
-							Name: "ls-complex-parent",
-						},
-					},
-				},
-			},
-			expected: map[types.NamespacedName]struct{}{
-				{Namespace: ns, Name: "direct-gateway"}:               {},
-				{Namespace: "complex-ns", Name: "xls-complex-parent"}: {},
-				{Namespace: ns, Name: "ls-complex-parent"}:            {},
 			},
 		},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			fakeClient := newFakeClient(t, tt.extraObjects...)
-			commonCol := &common.CommonCollections{
-				CrudClient: fakeClient,
-			}
-			gws := referencedGateways(context.Background(), commonCol, tt.routes, poolNN)
-			assert.Equal(t, tt.expected, gws)
-		})
+	route3 := ir.HttpRouteIR{
+		SourceObject: &gwv1.HTTPRoute{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: ns,
+			},
+			Spec: gwv1.HTTPRouteSpec{
+				CommonRouteSpec: gwv1.CommonRouteSpec{
+					ParentRefs: []gwv1.ParentReference{
+						{
+							Group: ptr.To(gwv1.Group(gwv1.GroupName)),
+							Kind:  ptr.To(gwv1.Kind(wellknown.GatewayKind)),
+							Name:  gwv1.ObjectName("unrelated-gw"),
+						},
+					},
+				},
+				Rules: []gwv1.HTTPRouteRule{
+					{
+						BackendRefs: []gwv1.HTTPBackendRef{
+							{
+								BackendRef: gwv1.BackendRef{
+									BackendObjectReference: gwv1.BackendObjectReference{
+										Group: ptr.To(gwv1.Group(gwv1.GroupName)),
+										Kind:  ptr.To(gwv1.Kind(wellknown.ServiceKind)),
+										Name:  gwv1.ObjectName("unrelated"),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
+	gws := referencedGateways([]ir.HttpRouteIR{route1, route2, route3}, poolNN)
+	assert.Equal(t, map[types.NamespacedName]struct{}{
+		gw1: {},
+		gw2: {},
+	}, gws)
 }
 
 func TestIsPoolBackend(t *testing.T) {
